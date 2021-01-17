@@ -1,0 +1,80 @@
+esphome:
+  name: chicken_door
+  platform: ESP8266
+  board: d1_mini
+
+packages:
+  wifi: !include wifi.yaml
+
+i2c:
+  sda: D2
+  scl: D1
+  scan: True
+  id: bus_a
+
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+sensor:
+  - platform: bh1750
+    name: "BH1750 Illuminance"
+    id: lux_sensor_chicken
+    address: 0x23
+    update_interval: 10s
+    on_value_range:
+      - below: 400
+        then:
+          - cover.close: chicken_door
+      - above: 1000
+        then:
+          - cover.open: chicken_door
+
+  - platform: bme280
+    temperature:
+      name: "BME280-1 Temperature"
+      oversampling: 16x
+    pressure:
+      name: "BME280-1 Pressure"
+    humidity:
+      name: "BME280-1 Humidity"
+    address: 0x76
+
+switch:
+  - platform: gpio
+    pin: D3
+    name: "Close Chicken Door"
+    id: close_cover_switch
+
+  - platform: gpio
+    pin: D6
+    name: "Open Chicken Door"
+    id: open_cover_switch
+
+cover:
+  - platform: time_based
+    name: "Chicken Door"
+    id: chicken_door
+
+    open_action:
+      - switch.turn_on: open_cover_switch
+    open_duration: 60s
+
+    close_action:
+      - switch.turn_on: close_cover_switch
+    close_duration: 60s
+
+    stop_action:
+      - switch.turn_off: open_cover_switch
+      - switch.turn_off: close_cover_switch
+
+
+web_server:
+  port: 80

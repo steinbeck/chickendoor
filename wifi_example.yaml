@@ -1,0 +1,11 @@
+
+# Put your wifi data here and rename this file to wifi.yaml
+
+wifi:
+  ssid: "my secret ssid"
+  password: "my secret wifi password"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Chicken Door Fallback Hotspot"
+    password: "something"
