@@ -13,15 +13,33 @@ i2c:
   id: bus_a
 
 
-captive_portal:
-
-# Enable logging
 logger:
+  level: DEBUG
+
+captive_portal:
 
 # Enable Home Assistant API
 api:
 
 ota:
+
+time:
+  - platform: sntp
+    id: sntp_time
+    on_time:
+      - seconds: /10
+        then:
+          - if:
+              condition:
+                for:
+                  time: 30s
+                  condition:
+                    sensor.in_range:
+                      id: lux_sensor_chicken
+                      below: 300
+              then:
+                - logger.log: "Hello World"
+
 
 sensor:
   - platform: bh1750
@@ -29,13 +47,13 @@ sensor:
     id: lux_sensor_chicken
     address: 0x23
     update_interval: 10s
-    on_value_range:
-      - below: 400
-        then:
-          - cover.close: chicken_door
-      - above: 1000
-        then:
-          - cover.open: chicken_door
+#    on_value_range:
+#      - below: 400
+#        then:
+#          - cover.close: chicken_door
+#      - above: 1000
+#        then:
+#          - cover.open: chicken_door
 
   - platform: bme280
     temperature:
