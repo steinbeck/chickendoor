@@ -1,6 +1,16 @@
 #include <Wire.h>
 #include <BH1750.h>
 #include <BME280I2C.h>
+#include <NTPClient.h>
+#include <ESP8266WiFi.h>
+#include <WiFiUdp.h>
+#include "secrets.h"
+
+const char ssid[] = WIFI_SSID;
+const char password[] = WIFI_PASSWD;
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
 
 BH1750 lightMeter;
 BME280I2C bme;
@@ -16,7 +26,14 @@ void setup() {
   pinMode(motorPinForward, OUTPUT);
   pinMode(motorPinBackward, OUTPUT);
   Serial.begin(115200);
+  WiFi.begin(ssid, password);
 
+  while ( WiFi.status() != WL_CONNECTED ) {
+    delay ( 500 );
+    Serial.print ( "." );
+  }
+
+  timeClient.begin();
   // Initialize the I2C bus (BH1750 library doesn't do this automatically)
   // On esp8266 devices you can select SCL and SDA pins using Wire.begin(D1, D2);
   Wire.begin();
