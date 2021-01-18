@@ -32,13 +32,30 @@ time:
           - if:
               condition:
                 for:
-                  time: 30s
+                  time: 70s
                   condition:
                     sensor.in_range:
                       id: lux_sensor_chicken
                       below: 300
               then:
-                - logger.log: "Hello World"
+                - logger.log:
+                    format: "Chicken door state is:  %.1f"
+                    args: [ 'id(chicken_door).position' ]
+                - cover.close: chicken_door
+          - if:
+              condition:
+                for:
+                  time: 70s
+                  condition:
+                    sensor.in_range:
+                      id: lux_sensor_chicken
+                      above: 1000
+              then:
+                - logger.log:
+                    format: "Chicken door state is:  %.1f"
+                    args: [ 'id(chicken_door).position' ]
+                - cover.open: chicken_door
+
 
 
 sensor:
@@ -70,11 +87,13 @@ switch:
     pin: D3
     name: "Close Chicken Door"
     id: close_cover_switch
+    restore_mode: always off
 
   - platform: gpio
     pin: D6
     name: "Open Chicken Door"
     id: open_cover_switch
+    restore_mode: always off
 
 cover:
   - platform: time_based
