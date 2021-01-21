@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include <BH1750.h>
 #include <BME280I2C.h>
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <ezTime.h>
 #include <Ticker.h>
 #include "secrets.h"
@@ -11,8 +11,9 @@ const char password[] = WIFI_PASSWD;
 Timezone myTZ;
 BH1750 lightMeter;
 BME280I2C bme;
-int motorPinForward = D3; 
-int motorPinBackward = D6; 
+int motorPinForward = 18; 
+int motorPinBackward = 19; 
+int analogPin = 32;
 float lux;
 float temperature;
 float pressure;
@@ -27,15 +28,22 @@ int minLuxDelay = 15;
 int maxLuxDelay = 15;
 int minLuxSeconds = 0;
 int maxLuxSeconds = 0;
+int motorRunningSeconds = 0;
+int motorRunDuration = 60;
 
-boolean doorOpen = true;
-boolean doorClosed= false; 
+boolean doorOpen = false;
+boolean doorClosed= true; 
 void checkMinLuxDuration();
 void checkMaxLuxDuration();
+void checkMotorRunning(int motorNumber);
 Ticker minLuxTicker;
 Ticker maxLuxTicker;
+Ticker checkMotorRunningTicker;
+int motorNumberPin;
 
 void setup() {
+  Wire.begin(16,17);
+  delay(500);
   // sets the pins as outputs:
   pinMode(motorPinForward, OUTPUT);
   pinMode(motorPinBackward, OUTPUT);
@@ -48,10 +56,10 @@ void setup() {
   }
   waitForSync();
   myTZ.setLocation(F("Europe/Berlin"));
-  Wire.begin();
+  
   lightMeter.begin();
   bme.begin();
-  reportClimateData();
+  
 }
 
 void loop() {
@@ -59,27 +67,46 @@ void loop() {
   readLux();
   checkLux();
   reportData();
+  //reportClimateData();
+  Serial.println(analogRead(analogPin));
   delay(1000);
 }
 
 
 void openDoor()
 {
+  Serial.print("Starting to open door ...");
   moveDoor(motorPinBackward);  
+  Serial.print("Door should now be open.");
 }
 
 void closeDoor()
 {
+  Serial.print("Starting to close door ...");
   moveDoor(motorPinForward);
+  Serial.print("Door should now be closed.");
 }
 
-void moveDoor(int motornumber)
+void moveDoor(int thisMotorNumberPin)
 {
-  Serial.print("Starting to open door ...");
-  digitalWrite(motornumber, HIGH);
-  delay(60000);
-  digitalWrite(motornumber, LOW);
-  Serial.print("Door should now be open.");
+  motorNumberPin = thisMotorNumberPin;
+  motorRunningSeconds = 0;
+  digitalWrite(motorNumberPin, HIGH);
+  checkMotorRunningTicker.attach(1, checkMotorRunning);
+  
+}
+
+void checkMotorRunning()
+{
+  motorRunningSeconds ++; 
+  Serial.println(analogRead(analogPin));
+  if (motorRunningSeconds >= motorRunDuration) 
+  {
+    Serial.println("Switching motor off");
+    digitalWrite(motorNumberPin, LOW); 
+    checkMotorRunningTicker.detach();
+    
+  }
 }
 
 void readLux()
@@ -114,6 +141,7 @@ void checkMinLuxDuration()
     Serial.print("Lux has been below threshold for ");
     Serial.print(minLuxSeconds);
     Serial.println(" seconds. Closing door. ");
+    closeDoor();
     minLuxSeconds = 0;
     doorClosed = true; 
     doorOpen = false;
@@ -141,6 +169,7 @@ void checkMaxLuxDuration()
     Serial.print("Lux has been above threshold for ");
     Serial.print(maxLuxSeconds);
     Serial.println(" seconds. Opening door. ");
+    openDoor();
     maxLuxSeconds = 0;
     doorClosed = false; 
     doorOpen = true;
