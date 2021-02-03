@@ -2,6 +2,8 @@ hole_distance = 25;  // the distance of the mounting hole to the wall
 mounting_plate_thickness = 5;
 mounting_plate_height = 40;
 mounting_plate_width = 60;
+wall_screw_radius = 2;
+m_screw_radius = 4;
 
 difference()
 {
@@ -40,24 +42,30 @@ difference()
     }
 
 
-    translate([0, 0, -10])
+    translate([-2, 0, -10])
     {
             rotate([0,90,0])
             {
-                cylinder(30 ,4, 4, true, $fn=1000);
+                wall_screw_hole();
             }
      }
 
-   translate([0, 0, 30])
+   translate([-2, 0, 30])
     {
             rotate([0,90,0])
             {
-                cylinder(30 ,4, 4, true, $fn=1000);
+                wall_screw_hole();
             }
      }
 
 
 
+}
+
+
+module wall_screw_hole()
+{
+            cylinder(mounting_plate_thickness * 2 ,wall_screw_radius, wall_screw_radius, true, $fn=1000);
 }
 
 module prism(l, w, h){
