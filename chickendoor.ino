@@ -4,25 +4,38 @@
 #include <WiFi.h>
 #include <ezTime.h>
 #include <Ticker.h>
+#include <Preferences.h>
+#include <Adafruit_INA219.h>
 #include "secrets.h"
 
+#define DOOR_UNDEFINED 0
+#define DOOR_OPEN 1
+#define DOOR_CLOSED 2
+#define OP_MODE_MANUAL 1
+#define OP_MODE_LUX 2
+#define OP_MODE_TIME 3
+
+
+Adafruit_INA219 ina219;
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWD;
 Timezone myTZ;
 BH1750 lightMeter;
 BME280I2C bme;
+unsigned int doorState = 0; // 1 is open, 2 is closed, use the defines above. 
 int motorPinForward = 18; 
 int motorPinBackward = 19; 
 int motorRunningSeconds = 0;
 int motorRunDuration = 60;
 boolean motorRunning = false;
-Ticker checkMotorRunningTicker;
+int doorCylclingState = 0;
+
 int motorNumberPin;
-int buttonUpPin = 26;
-int buttonDownPin = 27;
+int upButtonPin = 26;
+int downButtonPin = 27;
+// Instance of the button.
+Preferences preferences; 
 
-
-int analogPin = 33;
 float lux;
 float temperature;
 float pressure;
@@ -37,61 +50,47 @@ int minLuxDelay = 15;
 int maxLuxDelay = 15;
 int minLuxSeconds = 0;
 int maxLuxSeconds = 0;
+int operationMode = OP_MODE_LUX;
 
-double average = 0;
-double scaleFactor = 185.0; // for 20A module = 100.0
- // for 30A module = 66.0
-double voltage = 0.0;
+
 double current = 0.0;
 
 double zeroCurrent = 0.0;
 int runs = 0; 
 
-boolean doorOpen = false;
-boolean doorClosed= true; 
+
 void checkMinLuxDuration();
 void checkMaxLuxDuration();
-void checkMotorRunning(int motorNumber);
+void checkMotorRunning();
+void readLux();
+void checkLux();
+void checkButtons();
+
 Ticker minLuxTicker;
 Ticker maxLuxTicker;
+Ticker readCurrentTicker;
+Ticker readLuxTicker;
+Ticker checkLuxTicker;
+Ticker buttonTicker;
+Ticker startMotorTicker;
+Ticker motorRunningSecondsCounter;
 
-
-struct Button {
-  const uint8_t PIN;
-  uint32_t numberKeyPresses;
-  bool pressed;
-};
-
-Button button_auf = {buttonUpPin, 0, false};
-Button button_zu = {buttonDownPin, 0, false};
-
-void IRAM_ATTR isr1() {
-  if (button_auf.pressed == false)
-  {
-    button_auf.numberKeyPresses += 1;
-    button_auf.pressed = true;
-  }
-  
-}
-
-void IRAM_ATTR isr2() {
-  if (button_zu.pressed == false) 
-  {
-    button_zu.numberKeyPresses += 1;
-    button_zu.pressed = true;
-  }
-  
-}
 
 
 void setup() {
   Wire.begin(16,17);
   delay(500);
   // sets the two motor pins (open, close) as outputs:
+  
   pinMode(motorPinForward, OUTPUT);
   pinMode(motorPinBackward, OUTPUT);
   Serial.begin(115200);
   WiFi.begin(ssid, password);
+
+  if (! ina219.begin()) {
+    Serial.println("Failed to find INA219 chip");
+    while (1) { delay(10); }
+  }
 
   while ( WiFi.status() != WL_CONNECTED ) {
     delay ( 500 );
@@ -101,105 +100,126 @@ void setup() {
   Serial.print("Wifi connected with IP ");
   Serial.println(WiFi.localIP());
   myTZ.setLocation(F("Europe/Berlin"));
-  pinMode(button_auf.PIN, INPUT_PULLDOWN);
-  attachInterrupt(button_auf.PIN, isr1, FALLING);
-  pinMode(button_zu.PIN, INPUT_PULLDOWN);
-  attachInterrupt(button_zu.PIN, isr2, FALLING);
+  pinMode(upButtonPin, INPUT_PULLDOWN);
+  pinMode(downButtonPin, INPUT_PULLDOWN);
+
+  preferences.begin("chickendoor", false);
+ 
+  unsigned int tempDoorState = preferences.getUInt("doorstate", 0);
+  preferences.end(); 
+  if (tempDoorState == 0) 
+  {
+    Serial.println("door state undefined. Cycling door states ...");
+   // cycleDoor();
+  }
+  else doorState = tempDoorState;
+  Serial.print("doorState: ");
+  Serial.println(doorState);
+  
+  Serial.print("tempDoorState: ");
+  Serial.println(tempDoorState);
+  
+  //readCurrentTicker.attach(1,readCurrent);
+  //readLuxTicker.attach(1,readLux);
+  //checkLuxTicker.attach(1,checkLux);
+  //buttonTicker.attach(0.5,checkButtons);
+ 
   lightMeter.begin();
   bme.begin();
   
 }
 
 void loop() {
-
+checkButtons();
+checkMotorRunning();
+if (operationMode == OP_MODE_LUX)
+{
   readLux();
   checkLux();
-  
-  //reportData();
-  //reportClimateData();
-
-  for(int i = 0; i < 100; i++) {
-   average += analogRead(analogPin);
-   delay(1);
-   }
-   average /= 100;
-//   Serial.print("Average ADC current read: ");
-//   Serial.println(average);
-   voltage = ((average-775) / 4095.0) * 3300.0; // in mV
-   // for calibration to determine number 2494 at 0A current
-   // Serial.println(voltage);
-   current = voltage / scaleFactor; // in A
-    //prints current in A
-//   Serial.print("Current: ");
-//   Serial.println(current);
-
-    Serial.println(analogRead(analogPin));
-  
-//    runs++;
-//   zeroCurrent = zeroCurrent + analogRead(analogPin); 
-   
-   //Serial.print("Average Current: ");
-   //Serial.println(zeroCurrent/runs);
-  
-  handleButtonPressed();
-  delay(1000);
+}
+delay(200);
 }
 
 
 void openDoor()
 {
-
+  Serial.println("call to openDoor");
   if (motorRunning == false)
   {
     moveDoor(motorPinBackward);  
+    doorState = DOOR_UNDEFINED;
+    preferences.begin("chickendoor", false);
+    preferences.putUInt("doorstate", doorState);
+    preferences.end(); 
     Serial.println("Starting to open door ...");
+    Serial.println("Setting door state to UNDEFINED");
   }
   else Serial.println("Motor already moving");
 }
 
 void closeDoor()
 {
+  Serial.println("call to closeDoor");
   if (motorRunning == false)
   {
     moveDoor(motorPinForward);  
-    Serial.println("Starting to open door ...");
+    doorState = DOOR_UNDEFINED;
+    preferences.begin("chickendoor", false);
+    preferences.putUInt("doorstate", doorState);
+    preferences.end();
+    Serial.println("Starting to close door ...");
+    Serial.println("Setting door state to UNDEFINED");
   }
   else Serial.println("Motor already moving");}
+
+
 
 void moveDoor(int thisMotorNumberPin)
 {
   motorNumberPin = thisMotorNumberPin;
-  motorRunningSeconds = 0;
   digitalWrite(motorNumberPin, HIGH);
-  motorRunning = true;
-  checkMotorRunningTicker.attach(1, checkMotorRunning);
-  
+  motorRunning = true; 
 }
 
 void checkMotorRunning()
 {
-  motorRunningSeconds ++; 
-  //Serial.println(analogRead(analogPin));
-  if (motorRunningSeconds >= motorRunDuration) 
+  if (motorRunning == false) return;
+  if (readCurrent() < 10.0) 
   {
     Serial.println("Switching motor off");
     digitalWrite(motorNumberPin, LOW); 
     motorRunning = false;
-    checkMotorRunningTicker.detach();
-    
+    if (motorNumberPin == motorPinForward)
+    {
+    doorState = DOOR_CLOSED;
+    preferences.begin("chickendoor", false);
+    preferences.putUInt("doorstate", doorState);
+    preferences.end(); 
+    Serial.println("Written DOOR_CLOSED to settings");
+    }
+    else
+    {
+    doorState = DOOR_OPEN;
+    preferences.begin("chickendoor", false);
+    preferences.putUInt("doorstate", doorState);
+    preferences.end(); 
+    Serial.println("Written DOOR_OPEN to settings");
+    }
   }
 }
 
 void readLux()
 {
   lux = lightMeter.readLightLevel();  
+  //Serial.print("Lux: "); Serial.println(lux);
 }
 
 void checkLux()
 {
-  if (lux < minLux && doorOpen) minLuxTicker.attach(1, checkMinLuxDuration);
-  if (lux > maxLux && doorClosed) maxLuxTicker.attach(1, checkMaxLuxDuration);
+  if (lux < minLux && doorState == DOOR_OPEN) minLuxTicker.attach(1, checkMinLuxDuration);
+  if (lux > maxLux && doorState == DOOR_CLOSED) maxLuxTicker.attach(1, checkMaxLuxDuration);
 }
+
 
 
 void checkMinLuxDuration()
@@ -224,8 +244,6 @@ void checkMinLuxDuration()
     Serial.println(" seconds. Closing door. ");
     closeDoor();
     minLuxSeconds = 0;
-    doorClosed = true; 
-    doorOpen = false;
   }
 }
 
@@ -252,8 +270,7 @@ void checkMaxLuxDuration()
     Serial.println(" seconds. Opening door. ");
     openDoor();
     maxLuxSeconds = 0;
-    doorClosed = false; 
-    doorOpen = true;
+    
   }
 }
 
@@ -285,16 +302,51 @@ void reportClimateData()
 }
 
 
-void handleButtonPressed()
+void checkButtons()
 {
-    if (button_auf.pressed) {
-      Serial.printf("Button ''Auf'' has been pressed %u times\n", button_auf.numberKeyPresses);
-      openDoor();
-      button_auf.pressed = false;
+  int upButtonState = digitalRead(upButtonPin);
+  int downButtonState = digitalRead(downButtonPin);
+  
+//  Serial.print("upButtonPin: ");
+//  Serial.println(upButtonState);
+//  Serial.print("downButtonPin: ");
+//  Serial.println(downButtonState);
+
+//  if (downButtonState == 1 && doorState == DOOR_OPEN) closeDoor();
+//  else if (upButtonState == 1 && doorState == DOOR_CLOSED) openDoor();
+
+if (downButtonState == 1) closeDoor();
+  else if (upButtonState == 1) openDoor();
+}
+
+
+boolean checkDoorCycled()
+{
+  Serial.println("Cycling door to get to defined state");
+  if (doorState == DOOR_UNDEFINED)
+  closeDoor();
+  delay(1000);
+  openDoor();  
+}
+
+float readCurrent()
+{
+  float current_mA = 0;
+  int counter = 0;
+  float tempCurrent = 0;
+  for (int i = 0; i < 7; i++)
+  {
+    tempCurrent = abs(ina219.getCurrent_mA());
+    //Serial.print("Temp Current: "); Serial.print(tempCurrent); Serial.println(" mA");
+    if (tempCurrent > 0.0)
+    {
+      current_mA += tempCurrent;
+      counter ++;
+    }
+    delay(10);
   }
-    if (button_zu.pressed) {
-      Serial.printf("Button ''Zu'' has been pressed %u times\n", button_zu.numberKeyPresses);
-      closeDoor();
-      button_zu.pressed = false;
-  }
+  current_mA = current_mA/counter;
+  
+  //Serial.print("Current: "); Serial.print(current_mA); Serial.println(" mA");
+  return current_mA; 
 }
