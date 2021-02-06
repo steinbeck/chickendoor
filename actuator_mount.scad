@@ -9,6 +9,7 @@ m_screw_radius = 4; // The radius of the mounting hole in the actuator
 extrusion_width = 5;
 gap_width= 20;
 wall_thickness = 5;
+mount_wall_thickness = 8;
 extrusion_height = (m_screw_radius + wall_thickness)*2;
 extrusion_translation = mounting_plate_width /2 - gap_width / 2 - wall_thickness;
 
@@ -17,7 +18,7 @@ extrusion_translation = mounting_plate_width /2 - gap_width / 2 - wall_thickness
         {
             extrusion();
         }
-        translate([0,mounting_plate_height - extrusion_height, mounting_plate_width - extrusion_translation - wall_thickness])
+        translate([0,mounting_plate_height - extrusion_height, mounting_plate_width - extrusion_translation - mount_wall_thickness])
         {
             extrusion();
         }
@@ -34,7 +35,7 @@ module extrusion()
             
             union()
             {    
-                cube([extrusion_length, (m_screw_radius + wall_thickness)*2, extrusion_width]);    
+                cube([extrusion_length, (m_screw_radius + mount_wall_thickness)*2, extrusion_width]);    
                 translate([extrusion_length,extrusion_height/2,extrusion_width/2])
                 {
                     cylinder(extrusion_width, m_screw_radius + wall_thickness, m_screw_radius + wall_thickness, true, $fn=1000);
