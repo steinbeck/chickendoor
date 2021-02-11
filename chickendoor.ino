@@ -6,6 +6,34 @@
 #include <Ticker.h>
 #include <Preferences.h>
 #include <Adafruit_INA219.h>
+
+#include <AsyncEventSource.h>
+#include <AsyncJson.h>
+#include <SPIFFSEditor.h>
+#include <WebHandlerImpl.h>
+#include <ESPAsyncWebServer.h>
+#include <WebAuthentication.h>
+#include <AsyncWebSynchronization.h>
+#include <AsyncWebSocket.h>
+#include <WebResponseImpl.h>
+#include <StringArray.h>
+
+#include <AsyncTCP.h>
+
+#include <DNSServer.h>
+#include <ESPUI.h>
+
+const byte DNS_PORT = 53;
+IPAddress apIP(192, 168, 1, 1);
+DNSServer dnsServer;
+
+#if defined(ESP32)
+#include <WiFi.h>
+#else
+#include <ESP8266WiFi.h>
+#endif
+
+
 #include "secrets.h"
 
 #define DOOR_UNDEFINED 0
@@ -36,6 +64,20 @@ int downButtonPin = 27;
 // Instance of the button.
 Preferences preferences; 
 
+// Web UI controls
+uint16_t luxLabelId;
+uint16_t temperatureLabelId;
+uint16_t pressureLabelId;
+uint16_t humidityLabelId;
+uint16_t currentLabelId;
+uint16_t doorStateLabelId;
+uint16_t openOperationModeSelectorId;
+uint16_t closeOperationModeSelectorId;
+uint16_t openOperationModeLabelId;
+uint16_t closeOperationModeLabelId;
+uint16_t dateTimeLabelId;
+
+// Measurement Values
 float lux;
 float temperature;
 float pressure;
@@ -50,7 +92,10 @@ int minLuxDelay = 15;
 int maxLuxDelay = 15;
 int minLuxSeconds = 0;
 int maxLuxSeconds = 0;
-int operationMode = OP_MODE_LUX;
+int openOperationMode = OP_MODE_MANUAL;
+int closeOperationMode = OP_MODE_MANUAL;
+
+static long oldTime = 0;
 
 
 double current = 0.0;
@@ -62,7 +107,7 @@ int runs = 0;
 void checkMinLuxDuration();
 void checkMaxLuxDuration();
 void checkMotorRunning();
-void readLux();
+float readLux();
 void checkLux();
 void checkButtons();
 
@@ -85,6 +130,7 @@ void setup() {
   pinMode(motorPinForward, OUTPUT);
   pinMode(motorPinBackward, OUTPUT);
   Serial.begin(115200);
+  WiFi.setHostname("ChickenDoor");
   WiFi.begin(ssid, password);
 
   if (! ina219.begin()) {
@@ -100,6 +146,10 @@ void setup() {
   Serial.print("Wifi connected with IP ");
   Serial.println(WiFi.localIP());
   myTZ.setLocation(F("Europe/Berlin"));
+
+  setupWebUI();
+
+  
   pinMode(upButtonPin, INPUT_PULLDOWN);
   pinMode(downButtonPin, INPUT_PULLDOWN);
 
@@ -130,16 +180,118 @@ void setup() {
 }
 
 void loop() {
-checkButtons();
-checkMotorRunning();
-if (operationMode == OP_MODE_LUX)
-{
-  readLux();
-  checkLux();
-}
-delay(200);
+  checkButtons();
+  checkMotorRunning();
+  updateWebUI();
+//  if (operationMode == OP_MODE_LUX)
+//  {
+//    checkLux();
+//  }
+  delay(200);
 }
 
+void setupWebUI()
+{
+  uint16_t dashboardTab = ESPUI.addControl( ControlType::Tab, "Dashboard", "Dashboard" );
+  uint16_t settingsTab = ESPUI.addControl( ControlType::Tab, "Settings", "Settings" );
+  openOperationModeSelectorId = ESPUI.addControl( ControlType::Select, "Opening Mode", "", ControlColor::Alizarin, settingsTab, &operationModeSelector );
+  ESPUI.addControl( ControlType::Option, "Manual", "Manual", ControlColor::Alizarin, openOperationModeSelectorId );
+  ESPUI.addControl( ControlType::Option, "Lux", "Lux", ControlColor::Alizarin, openOperationModeSelectorId);
+  ESPUI.addControl( ControlType::Option, "Time", "Time", ControlColor::Alizarin, openOperationModeSelectorId );
+  closeOperationModeSelectorId = ESPUI.addControl( ControlType::Select, "Closing Mode", "", ControlColor::Alizarin, settingsTab, &operationModeSelector );
+  ESPUI.addControl( ControlType::Option, "Manual", "Manual", ControlColor::Alizarin, closeOperationModeSelectorId );
+  ESPUI.addControl( ControlType::Option, "Lux", "Lux", ControlColor::Alizarin, closeOperationModeSelectorId);
+  ESPUI.addControl( ControlType::Option, "Time", "Time", ControlColor::Alizarin, closeOperationModeSelectorId );
+
+  
+  dateTimeLabelId = ESPUI.addControl( ControlType::Label, "Date/Time", "", ControlColor::Peterriver,dashboardTab);
+  openOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Opening Mode", "", ControlColor::Peterriver,dashboardTab);
+  closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver,dashboardTab);
+  doorStateLabelId = ESPUI.addControl( ControlType::Label, "Door State", "", ControlColor::Peterriver,dashboardTab);
+  luxLabelId = ESPUI.addControl( ControlType::Label, "Lux", "lux", ControlColor::Peterriver,dashboardTab);
+  temperatureLabelId = ESPUI.addControl( ControlType::Label, "Temperature [°C]", "", ControlColor::Peterriver,dashboardTab);
+  pressureLabelId = ESPUI.addControl( ControlType::Label, "Pressure [hPa]", "", ControlColor::Peterriver,dashboardTab);
+  humidityLabelId = ESPUI.addControl( ControlType::Label, "Humidity [%]", "", ControlColor::Peterriver,dashboardTab);
+  currentLabelId = ESPUI.addControl( ControlType::Label, "Current [mA]", "", ControlColor::Peterriver,dashboardTab);
+  
+  
+  ESPUI.begin("ChickenDoor Control");
+  
+}
+
+void updateWebUI()
+{
+  if (millis() - oldTime > 5000) {
+    readLux();
+    readClimateData();
+    readCurrent();
+    ESPUI.print(dateTimeLabelId, String(myTZ.dateTime()));
+    ESPUI.print(luxLabelId, String(readLux()));
+    ESPUI.print(temperatureLabelId, String(temperature));
+    ESPUI.print(pressureLabelId, String(pressure/100));
+    ESPUI.print(humidityLabelId, String(humidity));
+    ESPUI.print(currentLabelId, String(readCurrent()));
+    switch(doorState)
+    {
+      case DOOR_OPEN:
+        ESPUI.print(doorStateLabelId, "Open");
+        break;
+      case DOOR_CLOSED:
+        ESPUI.print(doorStateLabelId, "Closed");
+        break;
+      case DOOR_UNDEFINED:
+        ESPUI.print(doorStateLabelId, "Undefined");
+        break;
+
+    }
+
+    switch(openOperationMode)
+    {
+      case OP_MODE_MANUAL:
+        ESPUI.print(openOperationModeLabelId, "Manual");
+        break;
+      case OP_MODE_LUX:
+        ESPUI.print(openOperationModeLabelId, "Lux");
+        break;
+      case OP_MODE_TIME:
+        ESPUI.print(openOperationModeLabelId, "Time");
+        break;
+    }
+
+    switch(closeOperationMode)
+    {
+      case OP_MODE_MANUAL:
+        ESPUI.print(closeOperationModeLabelId, "Manual");
+        break;
+      case OP_MODE_LUX:
+        ESPUI.print(closeOperationModeLabelId, "Lux");
+        break;
+      case OP_MODE_TIME:
+        ESPUI.print(closeOperationModeLabelId, "Time");
+        break;
+    }    
+    oldTime = millis();
+  }
+}
+
+void operationModeSelector(Control *sender, int type)
+{
+Serial.println(sender->id);
+Serial.println(sender->value);
+  int tempOpMode;
+  
+  if (sender->value == "Manual") tempOpMode = OP_MODE_MANUAL;
+  else if (sender->value == "Lux") tempOpMode = OP_MODE_LUX;
+  else if (sender->value == "Time") tempOpMode = OP_MODE_TIME;  
+//  Serial.print("tempOpMode: "); Serial.println(tempOpMode); 
+Serial.print("openOperationModeSelectorId: "); Serial.println(openOperationModeSelectorId); 
+Serial.print("closeOperationModeSelectorId: "); Serial.println(closeOperationModeSelectorId); 
+//  Serial.print("ESPUI.getControl(openOperationModeLabelId)->id: "); Serial.println(ESPUI.getControl(openOperationModeLabelId)->id); 
+//  Serial.print("ESPUI.getControl(closeOperationModeLabelId)->id: "); Serial.println(ESPUI.getControl(closeOperationModeLabelId)->id);
+  
+  if (sender->id == openOperationModeSelectorId) openOperationMode = tempOpMode;
+  else if (sender->id == closeOperationModeSelectorId) closeOperationMode = tempOpMode;  
+}
 
 void openDoor()
 {
@@ -208,10 +360,11 @@ void checkMotorRunning()
   }
 }
 
-void readLux()
+float readLux()
 {
   lux = lightMeter.readLightLevel();  
   //Serial.print("Lux: "); Serial.println(lux);
+  return lux;
 }
 
 void checkLux()
@@ -284,20 +437,20 @@ void reportData()
   Serial.println(" lx");
 }
 
-void reportClimateData()
+void readClimateData()
 {
   bme.read(pressure, temperature, humidity); 
-  Serial.print("Temperature: ");
-  Serial.print(temperature);
-  Serial.println("°C");
-
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
-  Serial.println(" %rH");
-
-  Serial.print("Pressure: ");
-  Serial.print(pressure/100);
-  Serial.println(" mBar");
+//  Serial.print("Temperature: ");
+//  Serial.print(temperature);
+//  Serial.println("°C");
+//
+//  Serial.print("Humidity: ");
+//  Serial.print(humidity);
+//  Serial.println(" %rH");
+//
+//  Serial.print("Pressure: ");
+//  Serial.print(pressure/100);
+//  Serial.println(" mBar");
 
 }
 
