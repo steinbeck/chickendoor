@@ -39,9 +39,9 @@ DNSServer dnsServer;
 #define DOOR_UNDEFINED 0
 #define DOOR_OPEN 1
 #define DOOR_CLOSED 2
-#define OP_MODE_MANUAL 1
-#define OP_MODE_LUX 2
-#define OP_MODE_TIME 3
+#define OP_MODE_MANUAL 0
+#define OP_MODE_LUX 1
+#define OP_MODE_TIME 2
 
 
 Adafruit_INA219 ina219;
@@ -76,6 +76,19 @@ uint16_t closeOperationModeSelectorId;
 uint16_t openOperationModeLabelId;
 uint16_t closeOperationModeLabelId;
 uint16_t dateTimeLabelId;
+uint16_t openButtonId;
+uint16_t closeButtonId;
+
+uint16_t closingLuxTextId;
+uint16_t openingLuxTextId;
+uint16_t closingLuxDelayTextId;
+uint16_t openingLuxDelayTextId;
+uint16_t closingTimeTextId;
+uint16_t openingTimeTextId;
+
+
+
+char* modeStrings[]={"Manual", "Lux", "Time"};
 
 // Measurement Values
 float lux;
@@ -83,17 +96,19 @@ float temperature;
 float pressure;
 float humidity;
 /*
- * If the light stays below minlux for minluxdelay seconds, the door closes. 
- * If the light is above maxlux for maxluxdelay seconds, the door opens.
+ * If the light stays below closingLux for closingLuxdelay seconds, the door closes. 
+ * If the light is above openingLux for openingLuxdelay seconds, the door opens.
  */
-float minLux = 300; 
-float maxLux = 500;
-int minLuxDelay = 15;
-int maxLuxDelay = 15;
-int minLuxSeconds = 0;
-int maxLuxSeconds = 0;
-int openOperationMode = OP_MODE_MANUAL;
-int closeOperationMode = OP_MODE_MANUAL;
+float closingLux = 300; // if light is smaller than closingLux for closingLuxDelay in minutes, then close the door 
+float openingLux = 500; // if light is more than openingLux for openingLuxDelay in minutes, then open the door
+int closingLuxDelay = 15;
+int openingLuxDelay = 15;
+int closingLuxSeconds = 0;
+int openingLuxSeconds = 0;
+String openingTime = "08:00";
+String closingTime = "19:00";
+unsigned int openOperationMode = OP_MODE_MANUAL;
+unsigned int closeOperationMode = OP_MODE_MANUAL;
 
 static long oldTime = 0;
 
@@ -104,15 +119,15 @@ double zeroCurrent = 0.0;
 int runs = 0; 
 
 
-void checkMinLuxDuration();
-void checkMaxLuxDuration();
+void checkclosingLuxDuration();
+void checkopeningLuxDuration();
 void checkMotorRunning();
 float readLux();
 void checkLux();
 void checkButtons();
 
-Ticker minLuxTicker;
-Ticker maxLuxTicker;
+Ticker closingLuxTicker;
+Ticker openingLuxTicker;
 Ticker readCurrentTicker;
 Ticker readLuxTicker;
 Ticker checkLuxTicker;
@@ -146,34 +161,10 @@ void setup() {
   Serial.print("Wifi connected with IP ");
   Serial.println(WiFi.localIP());
   myTZ.setLocation(F("Europe/Berlin"));
-
+  loadPreferences();
   setupWebUI();
-
-  
   pinMode(upButtonPin, INPUT_PULLDOWN);
   pinMode(downButtonPin, INPUT_PULLDOWN);
-
-  preferences.begin("chickendoor", false);
- 
-  unsigned int tempDoorState = preferences.getUInt("doorstate", 0);
-  preferences.end(); 
-  if (tempDoorState == 0) 
-  {
-    Serial.println("door state undefined. Cycling door states ...");
-   // cycleDoor();
-  }
-  else doorState = tempDoorState;
-  Serial.print("doorState: ");
-  Serial.println(doorState);
-  
-  Serial.print("tempDoorState: ");
-  Serial.println(tempDoorState);
-  
-  //readCurrentTicker.attach(1,readCurrent);
-  //readLuxTicker.attach(1,readLux);
-  //checkLuxTicker.attach(1,checkLux);
-  //buttonTicker.attach(0.5,checkButtons);
- 
   lightMeter.begin();
   bme.begin();
   
@@ -194,15 +185,25 @@ void setupWebUI()
 {
   uint16_t dashboardTab = ESPUI.addControl( ControlType::Tab, "Dashboard", "Dashboard" );
   uint16_t settingsTab = ESPUI.addControl( ControlType::Tab, "Settings", "Settings" );
-  openOperationModeSelectorId = ESPUI.addControl( ControlType::Select, "Opening Mode", "", ControlColor::Alizarin, settingsTab, &operationModeSelector );
-  ESPUI.addControl( ControlType::Option, "Manual", "Manual", ControlColor::Alizarin, openOperationModeSelectorId );
-  ESPUI.addControl( ControlType::Option, "Lux", "Lux", ControlColor::Alizarin, openOperationModeSelectorId);
-  ESPUI.addControl( ControlType::Option, "Time", "Time", ControlColor::Alizarin, openOperationModeSelectorId );
-  closeOperationModeSelectorId = ESPUI.addControl( ControlType::Select, "Closing Mode", "", ControlColor::Alizarin, settingsTab, &operationModeSelector );
-  ESPUI.addControl( ControlType::Option, "Manual", "Manual", ControlColor::Alizarin, closeOperationModeSelectorId );
-  ESPUI.addControl( ControlType::Option, "Lux", "Lux", ControlColor::Alizarin, closeOperationModeSelectorId);
-  ESPUI.addControl( ControlType::Option, "Time", "Time", ControlColor::Alizarin, closeOperationModeSelectorId );
+  openOperationModeSelectorId = ESPUI.addControl( ControlType::Select, "Opening Mode", modeStrings[openOperationMode], ControlColor::Alizarin, settingsTab, &operationModeSelector );
+  ESPUI.addControl( ControlType::Option, modeStrings[0], modeStrings[0], ControlColor::Alizarin, openOperationModeSelectorId );
+  ESPUI.addControl( ControlType::Option, modeStrings[1], modeStrings[1], ControlColor::Alizarin, openOperationModeSelectorId);
+  ESPUI.addControl( ControlType::Option, modeStrings[2], modeStrings[2], ControlColor::Alizarin, openOperationModeSelectorId );
+  closeOperationModeSelectorId = ESPUI.addControl( ControlType::Select, "Closing Mode", modeStrings[closeOperationMode], ControlColor::Alizarin, settingsTab, &operationModeSelector );
+  ESPUI.addControl( ControlType::Option, modeStrings[0], modeStrings[0], ControlColor::Alizarin, closeOperationModeSelectorId );
+  ESPUI.addControl( ControlType::Option, modeStrings[1], modeStrings[1], ControlColor::Alizarin, closeOperationModeSelectorId);
+  ESPUI.addControl( ControlType::Option, modeStrings[2], modeStrings[2], ControlColor::Alizarin, closeOperationModeSelectorId );
 
+
+  openingLuxTextId = ESPUI.addControl( ControlType::Text, "Opening Lux", String(openingLux), ControlColor::Alizarin, settingsTab, &textHandler);
+  closingLuxTextId = ESPUI.addControl( ControlType::Text, "Closing Lux", String(closingLux), ControlColor::Alizarin, settingsTab, &textHandler);
+  openingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Opening Delay", String(openingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
+  closingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Closing Delay", String(closingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
+  openingTimeTextId = ESPUI.addControl( ControlType::Text, "Opening Time", String(openingTime), ControlColor::Alizarin, settingsTab, &textHandler);
+  closingTimeTextId = ESPUI.addControl( ControlType::Text, "Closing Time", String(closingTime), ControlColor::Alizarin, settingsTab, &textHandler);
+
+  openButtonId = ESPUI.addControl( ControlType::Button, "Door Control", "Open Door", ControlColor::Emerald,dashboardTab, &buttonHandler);
+  closeButtonId = ESPUI.addControl( ControlType::Button, "Door Control", "Close Door", ControlColor::Emerald,dashboardTab, &buttonHandler);
   
   dateTimeLabelId = ESPUI.addControl( ControlType::Label, "Date/Time", "", ControlColor::Peterriver,dashboardTab);
   openOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Opening Mode", "", ControlColor::Peterriver,dashboardTab);
@@ -248,13 +249,13 @@ void updateWebUI()
     switch(openOperationMode)
     {
       case OP_MODE_MANUAL:
-        ESPUI.print(openOperationModeLabelId, "Manual");
+        ESPUI.print(openOperationModeLabelId, modeStrings[0]);
         break;
       case OP_MODE_LUX:
-        ESPUI.print(openOperationModeLabelId, "Lux");
+        ESPUI.print(openOperationModeLabelId, modeStrings[1]);
         break;
       case OP_MODE_TIME:
-        ESPUI.print(openOperationModeLabelId, "Time");
+        ESPUI.print(openOperationModeLabelId, modeStrings[2]);
         break;
     }
 
@@ -274,6 +275,33 @@ void updateWebUI()
   }
 }
 
+void loadPreferences()
+{
+  //Serial.println("Reading Preferences: ");
+  preferences.begin("chickendoor", false); 
+  unsigned int tempDoorState = preferences.getUInt("doorstate", 0);
+  openOperationMode = preferences.getUInt("opopmod", 0);
+  //Serial.print("openOperationMode: "); Serial.println(openOperationMode);
+  closeOperationMode = preferences.getUInt("clopmod", 0); 
+  //Serial.print("closeOperationMode: "); Serial.println(closeOperationMode);
+  closingLux = preferences.getFloat("cllux");
+  openingLux = preferences.getFloat("oplux");
+  closingLuxDelay = preferences.getFloat("clluxdel");
+  openingLuxDelay = preferences.getFloat("opluxdel");
+
+  preferences.end(); 
+
+  // postprocessing of preferences
+  if (tempDoorState == 0) 
+  {
+    Serial.println("door state undefined. Cycling door states ...");
+   // cycleDoor();
+  }
+  else doorState = tempDoorState;
+
+  
+}
+
 void operationModeSelector(Control *sender, int type)
 {
 Serial.println(sender->id);
@@ -291,7 +319,94 @@ Serial.print("closeOperationModeSelectorId: "); Serial.println(closeOperationMod
   
   if (sender->id == openOperationModeSelectorId) openOperationMode = tempOpMode;
   else if (sender->id == closeOperationModeSelectorId) closeOperationMode = tempOpMode;  
+
+    preferences.begin("chickendoor", false);
+    Serial.println(preferences.putUInt("opopmod", openOperationMode));
+    Serial.print("Writing setting -> openOperationMode: "); Serial.println(openOperationMode);
+    Serial.println(preferences.putUInt("clopmod", closeOperationMode));
+    Serial.print("Writing setting -> closeOperationMode: "); Serial.println(closeOperationMode);
+    preferences.end();   
 }
+
+void buttonHandler(Control *sender, int type)
+{
+  if (type == B_UP)
+  {
+    Serial.println(sender->id);
+    Serial.println(sender->value);
+    
+    if (sender->id == openButtonId) 
+    {
+      openDoor();
+      return;
+    }
+    if (sender->id == closeButtonId) 
+    {
+      closeDoor();
+      return;
+    }
+  }
+}
+
+void textHandler(Control *sender, int type)
+{
+  Serial.println(sender->id);
+  Serial.println(sender->value);
+  int tempInt;
+  float tempFloat;
+  if (sender->id == openingLuxTextId)
+  {
+    tempInt = sender->value.toInt();
+    if (tempInt > 0)
+    {
+      openingLux = tempInt;
+      preferences.begin("chickendoor", false);
+      preferences.putFloat("oplux", openingLux);
+      preferences.end();   
+    }
+  }
+ if (sender->id == closingLuxTextId)
+  {
+    tempInt = sender->value.toInt();
+    if (tempInt > 0)
+    {
+      closingLux = tempInt;
+      preferences.begin("chickendoor", false);
+      preferences.putFloat("cllux", closingLux);
+      preferences.end();   
+    }
+  }
+  if (sender->id == closingLuxDelayTextId)
+  {
+    tempInt = sender->value.toInt();
+    if (tempInt > 0)
+    {
+      closingLuxDelay = tempInt;
+      preferences.begin("chickendoor", false);
+      preferences.putFloat("clluxdel", closingLuxDelay);
+      preferences.end();   
+    }
+  }
+  if (sender->id == openingLuxDelayTextId)
+  {
+    tempInt = sender->value.toInt();
+    if (tempInt > 0)
+    {
+      openingLuxDelay = tempInt;
+      preferences.begin("chickendoor", false);
+      preferences.putFloat("opluxdel", openingLuxDelay);
+      preferences.end();   
+    }
+  }
+
+//  openingTimeTextId = ESPUI.addControl( ControlType::Text, "Opening Time", String(openingTime), ControlColor::Alizarin, settingsTab, &textHandler);
+//  closingTimeTextId = ESPUI.addControl( ControlType::Text, "Closing Time", String(closingTime), ControlColor::Alizarin, settingsTab, &textHandler);
+//
+
+}
+
+
+
 
 void openDoor()
 {
@@ -369,60 +484,60 @@ float readLux()
 
 void checkLux()
 {
-  if (lux < minLux && doorState == DOOR_OPEN) minLuxTicker.attach(1, checkMinLuxDuration);
-  if (lux > maxLux && doorState == DOOR_CLOSED) maxLuxTicker.attach(1, checkMaxLuxDuration);
+  if (lux < closingLux && doorState == DOOR_OPEN) closingLuxTicker.attach(1, checkclosingLuxDuration);
+  if (lux > openingLux && doorState == DOOR_CLOSED) openingLuxTicker.attach(1, checkopeningLuxDuration);
 }
 
 
 
-void checkMinLuxDuration()
+void checkClosingLuxDuration()
 {
-  Serial.print("Inside checkMinLuxDuration for ");
-  Serial.print(minLuxSeconds );
+  Serial.print("Inside checkclosingLuxDuration for ");
+  Serial.print(closingLuxSeconds );
   Serial.print(" seconds.");
-  if (lux > minLux)
+  if (lux > closingLux)
   {
     Serial.println("Lux above threshold. Stopping door countdown.");
-    minLuxSeconds = 0;
-    minLuxTicker.detach();
+    closingLuxSeconds = 0;
+    closingLuxTicker.detach();
     return;
   }
-  minLuxSeconds++;
-  if (minLuxSeconds > minLuxDelay)
+  closingLuxSeconds++;
+  if (closingLuxSeconds > closingLuxDelay)
   {
-    minLuxTicker.detach();
+    closingLuxTicker.detach();
     
     Serial.print("Lux has been below threshold for ");
-    Serial.print(minLuxSeconds);
+    Serial.print(closingLuxSeconds);
     Serial.println(" seconds. Closing door. ");
     closeDoor();
-    minLuxSeconds = 0;
+    closingLuxSeconds = 0;
   }
 }
 
 
-void checkMaxLuxDuration()
+void checkOpeningLuxDuration()
 {
-  Serial.print("Inside checkMaxLuxDuration for ");
-  Serial.print(maxLuxSeconds );
+  Serial.print("Inside checkopeningLuxDuration for ");
+  Serial.print(openingLuxSeconds );
   Serial.print(" seconds.");
-  if (lux < maxLux)
+  if (lux < openingLux)
   {
     Serial.println("Lux below threshold. Stopping door countdown.");
-    maxLuxSeconds = 0;
-    maxLuxTicker.detach();
+    openingLuxSeconds = 0;
+    openingLuxTicker.detach();
     return;
   }
-  maxLuxSeconds++;
-  if (maxLuxSeconds > maxLuxDelay)
+  openingLuxSeconds++;
+  if (openingLuxSeconds > openingLuxDelay)
   {
-    maxLuxTicker.detach();
+    openingLuxTicker.detach();
     
     Serial.print("Lux has been above threshold for ");
-    Serial.print(maxLuxSeconds);
+    Serial.print(openingLuxSeconds);
     Serial.println(" seconds. Opening door. ");
     openDoor();
-    maxLuxSeconds = 0;
+    openingLuxSeconds = 0;
     
   }
 }
