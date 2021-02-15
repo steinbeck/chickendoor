@@ -105,8 +105,13 @@ int closingLuxDelay = 15;
 int openingLuxDelay = 15;
 int closingLuxSeconds = 0;
 int openingLuxSeconds = 0;
-String openingTime = "08:00";
-String closingTime = "19:00";
+char openingTime[10] = "08:00";
+char closingTime[10] = "19:00";
+int openingHour = 8;
+int openingMinute = 0;
+int closingHour = 19;
+int closingMinute = 0;
+
 unsigned int openOperationMode = OP_MODE_MANUAL;
 unsigned int closeOperationMode = OP_MODE_MANUAL;
 
@@ -194,13 +199,19 @@ void setupWebUI()
   ESPUI.addControl( ControlType::Option, modeStrings[1], modeStrings[1], ControlColor::Alizarin, closeOperationModeSelectorId);
   ESPUI.addControl( ControlType::Option, modeStrings[2], modeStrings[2], ControlColor::Alizarin, closeOperationModeSelectorId );
 
-
   openingLuxTextId = ESPUI.addControl( ControlType::Text, "Opening Lux", String(openingLux), ControlColor::Alizarin, settingsTab, &textHandler);
   closingLuxTextId = ESPUI.addControl( ControlType::Text, "Closing Lux", String(closingLux), ControlColor::Alizarin, settingsTab, &textHandler);
   openingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Opening Delay", String(openingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
   closingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Closing Delay", String(closingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
-  openingTimeTextId = ESPUI.addControl( ControlType::Text, "Opening Time", String(openingTime), ControlColor::Alizarin, settingsTab, &textHandler);
-  closingTimeTextId = ESPUI.addControl( ControlType::Text, "Closing Time", String(closingTime), ControlColor::Alizarin, settingsTab, &textHandler);
+
+  snprintf(openingTime, sizeof(openingTime), "%02i:%02i", openingHour, openingMinute);
+  Serial.println(openingTime);
+  
+  snprintf(closingTime, sizeof(closingTime), "%02i:%02i", closingHour, closingMinute);
+  Serial.println(closingTime);
+  
+  openingTimeTextId = ESPUI.addControl( ControlType::Text, "Opening Time [hh:mm]", String(openingTime), ControlColor::Alizarin, settingsTab, &textHandler);
+  closingTimeTextId = ESPUI.addControl( ControlType::Text, "Closing Time [hh:mm]", String(closingTime), ControlColor::Alizarin, settingsTab, &textHandler);
 
   openButtonId = ESPUI.addControl( ControlType::Button, "Door Control", "Open Door", ControlColor::Emerald,dashboardTab, &buttonHandler);
   closeButtonId = ESPUI.addControl( ControlType::Button, "Door Control", "Close Door", ControlColor::Emerald,dashboardTab, &buttonHandler);
@@ -288,7 +299,11 @@ void loadPreferences()
   openingLux = preferences.getFloat("oplux");
   closingLuxDelay = preferences.getFloat("clluxdel");
   openingLuxDelay = preferences.getFloat("opluxdel");
-
+  openingHour = preferences.getUInt("optimehh");
+  openingMinute = preferences.getUInt("optimemm");
+  closingHour = preferences.getUInt("cltimehh");
+  closingMinute = preferences.getUInt("cltimemm");
+  
   preferences.end(); 
 
   // postprocessing of preferences
@@ -399,13 +414,67 @@ void textHandler(Control *sender, int type)
     }
   }
 
-//  openingTimeTextId = ESPUI.addControl( ControlType::Text, "Opening Time", String(openingTime), ControlColor::Alizarin, settingsTab, &textHandler);
-//  closingTimeTextId = ESPUI.addControl( ControlType::Text, "Closing Time", String(closingTime), ControlColor::Alizarin, settingsTab, &textHandler);
-//
+  if (sender->id == openingTimeTextId)
+  {
+    int tempHour = getHour(sender->value);
+    int tempMinute = getMinute(sender->value);
+    if (tempHour > -1 && tempMinute > -1)
+    {
+      openingHour = tempHour;
+      openingMinute = tempMinute;
+      
+      preferences.begin("chickendoor", false);
+      preferences.putUInt("optimehh", openingHour);
+      preferences.putUInt("optimemm", openingMinute);
+      preferences.end();   
+    }
+  }
+
+
+  if (sender->id == closingTimeTextId)
+  {
+    int tempHour = getHour(sender->value);
+    int tempMinute = getMinute(sender->value);
+    if (tempHour > -1 && tempMinute > -1)
+    {
+      closingHour = tempHour;
+      closingMinute = tempMinute;
+      
+      preferences.begin("chickendoor", false);
+      preferences.putUInt("cltimehh", closingHour);
+      preferences.putUInt("cltimemm", closingMinute);
+      preferences.end();   
+    }
+  }
 
 }
 
 
+int getHour(String timeString)
+{
+  int hourInt = -1;
+  int colonIndex = timeString.indexOf(':');
+  Serial.println(colonIndex);
+  if (colonIndex > 0)
+  {
+    hourInt = timeString.substring(0,colonIndex).toInt();
+    Serial.println(timeString.substring(0,colonIndex));
+    Serial.println(hourInt);
+  }
+  return hourInt;
+}
+
+int getMinute(String timeString)
+{
+  int minuteInt = -1;
+  int colonIndex = timeString.indexOf(':');
+  if (colonIndex > 0)
+  {
+    minuteInt = timeString.substring(colonIndex + 1,timeString.length()).toInt();
+    Serial.println(minuteInt);
+  }
+  return minuteInt;
+}
 
 
 void openDoor()
