@@ -5,6 +5,8 @@ The ESP is hooked up to a BME280 climate sensor (not needed, just for fun) as we
 Furthermore, if you discover on your coop camera :) that one of the chicken didn't get in before the door closed automatically in the evening and you are not at home, you cannot open the door remotely to let the late-comer in. In our rural area, the likelihood is high that you have one saturated predetor more in the area and one chicken less. 
 Last but not least, the standard ChickenGuard (TM) door can be simply pushed up once closed. They do have a model that locks, though, but we have the standard model. The DC actuator keeps the door closed once it is closed. No way to push it up. The downside of the actuator is that is very powerful. If something gets in the way when the door closes, it or the door gets damaged. 
 
+Ok, so much for the motivation for this project. Here are the specs:
+
 ## Specifications
 
 * 3 modes (manual-, time-based, light-based operation), independently selectable for opening and closing (e.g. open every morning at 8am, but close at night when the light is low).
