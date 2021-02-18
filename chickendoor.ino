@@ -192,6 +192,13 @@ void loop() {
   {
     checkLux();
   }
+
+  if (openOperationMode == OP_MODE_TIME || closeOperationMode == OP_MODE_TIME)
+  {
+    checkTime();
+  }
+
+  
   delay(200);
 }
 
@@ -570,6 +577,23 @@ void checkLux()
 
     openingLuxTicker.attach(1, checkOpeningLuxDuration);
     luxTickerRunning = true;
+    return;
+  }
+}
+
+void checkTime()
+{
+
+  if (doorState == DOOR_OPEN && closeOperationMode == OP_MODE_TIME ) 
+  {
+    if (myTZ.hour() == closingHour && myTZ.minute() == closingMinute)
+    closeDoor();
+    return;
+  }
+  if (doorState == DOOR_CLOSED && openOperationMode == OP_MODE_TIME) 
+  {
+    if (myTZ.hour() == openingHour && myTZ.minute() == openingMinute)
+    openDoor();
     return;
   }
 }
