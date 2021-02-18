@@ -20,7 +20,7 @@ Ok, so much for the motivation for this project. Here are the specs:
 I decided to build this device without a display and without the possiblity to adjust the settings directly at the device, apart from the two buttons to open and close the door. 
 Instead, I added a web interface with a dashboard with two virtual buttons to open and close the door as well as some status information and sensor readings. And there is a settings panel. 
 
-[dashboard]: https://github.com/steinbeck/chickendoor/blob/main/images/dashboard.png "Dashboard in web interface of IoT chicken door"
-[settings]: https://github.com/steinbeck/chickendoor/blob/main/images/settings.png "Setting panel in web interface of IoT chicken door"
+![dashboard] (/images/dashboard.png) "Dashboard in web interface of IoT chicken door"
+![settings] (/images/settings.png) "Setting panel in web interface of IoT chicken door"
 
 
