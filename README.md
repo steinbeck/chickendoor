@@ -1,4 +1,4 @@
-# Chicken Door
+# IoT Chicken Door
 ## Introduction
 This is code for an ESP32-based Internet-of-Things (IoT) chicken door.
 The ESP is hooked up to a BME280 climate sensor (not needed, just for fun) as well as a BH1750 light sensor, as well as a DC motordriver connected to a 30 cm DC actuator to open and close the door. We currently have a ChickenGuard(TM) module to close and open the door. It works well, but lacks the Internet access. If, say, you are away from home and decide that you want to let the chicken out manually tomorrow, but the door is in lux-mode (opens when a certain amount of daylight is reached) then you need to live with the situation. 
@@ -15,5 +15,12 @@ Ok, so much for the motivation for this project. Here are the specs:
 * Manual opening and closing with two buttons at the device. 
 * A current sensor that notices when the built-in end stops of the actuator have switched the device off, so the system knows when the door is fully open or closed. 
 * Web interface for the settings and sensor readings. 
+
+## Web interface
+I decided to build this device without a display and without the possiblity to adjust the settings directly at the device, apart from the two buttons to open and close the door. 
+Instead, I added a web interface with a dashboard with two virtual buttons to open and close the door as well as some status information and sensor readings. And there is a settings panel. 
+
+[dashboard]: https://github.com/steinbeck/chickendoor/blob/main/images/dashboard.png "Dashboard in web interface of IoT chicken door"
+[settings]: https://github.com/steinbeck/chickendoor/blob/main/images/settings.png "Setting panel in web interface of IoT chicken door"
 
 
