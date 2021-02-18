@@ -66,6 +66,7 @@ Preferences preferences;
 
 // Web UI controls
 uint16_t luxLabelId;
+uint16_t luxCountdownLabelId;
 uint16_t temperatureLabelId;
 uint16_t pressureLabelId;
 uint16_t humidityLabelId;
@@ -86,6 +87,7 @@ uint16_t openingLuxDelayTextId;
 uint16_t closingTimeTextId;
 uint16_t openingTimeTextId;
 
+boolean luxTickerRunning = false;
 
 
 char* modeStrings[]={"Manual", "Lux", "Time"};
@@ -101,10 +103,17 @@ float humidity;
  */
 float closingLux = 300; // if light is smaller than closingLux for closingLuxDelay in minutes, then close the door 
 float openingLux = 500; // if light is more than openingLux for openingLuxDelay in minutes, then open the door
-int closingLuxDelay = 15;
-int openingLuxDelay = 15;
-int closingLuxSeconds = 0;
-int openingLuxSeconds = 0;
+
+int closingLuxDelay;
+int openingLuxDelay;
+
+long closingLuxSeconds;
+long openingLuxSeconds;
+long tempClosingLuxSeconds;
+long tempOpeningLuxSeconds;
+
+
+
 char openingTime[10] = "08:00";
 char closingTime[10] = "19:00";
 int openingHour = 8;
@@ -179,10 +188,10 @@ void loop() {
   checkButtons();
   checkMotorRunning();
   updateWebUI();
-//  if (operationMode == OP_MODE_LUX)
-//  {
-//    checkLux();
-//  }
+  if (openOperationMode == OP_MODE_LUX || closeOperationMode == OP_MODE_LUX)
+  {
+    checkLux();
+  }
   delay(200);
 }
 
@@ -201,14 +210,12 @@ void setupWebUI()
 
   openingLuxTextId = ESPUI.addControl( ControlType::Text, "Opening Lux", String(openingLux), ControlColor::Alizarin, settingsTab, &textHandler);
   closingLuxTextId = ESPUI.addControl( ControlType::Text, "Closing Lux", String(closingLux), ControlColor::Alizarin, settingsTab, &textHandler);
-  openingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Opening Delay", String(openingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
-  closingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Closing Delay", String(closingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
+  openingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Opening Delay [min]", String(openingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
+  closingLuxDelayTextId = ESPUI.addControl( ControlType::Text, "Closing Delay [min]", String(closingLuxDelay), ControlColor::Alizarin, settingsTab, &textHandler);
+  
 
   snprintf(openingTime, sizeof(openingTime), "%02i:%02i", openingHour, openingMinute);
-  Serial.println(openingTime);
-  
   snprintf(closingTime, sizeof(closingTime), "%02i:%02i", closingHour, closingMinute);
-  Serial.println(closingTime);
   
   openingTimeTextId = ESPUI.addControl( ControlType::Text, "Opening Time [hh:mm]", String(openingTime), ControlColor::Alizarin, settingsTab, &textHandler);
   closingTimeTextId = ESPUI.addControl( ControlType::Text, "Closing Time [hh:mm]", String(closingTime), ControlColor::Alizarin, settingsTab, &textHandler);
@@ -221,6 +228,7 @@ void setupWebUI()
   closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver,dashboardTab);
   doorStateLabelId = ESPUI.addControl( ControlType::Label, "Door State", "", ControlColor::Peterriver,dashboardTab);
   luxLabelId = ESPUI.addControl( ControlType::Label, "Lux", "lux", ControlColor::Peterriver,dashboardTab);
+  luxCountdownLabelId = ESPUI.addControl( ControlType::Label, "Lux Countdown", "Not ticking", ControlColor::Peterriver,dashboardTab);
   temperatureLabelId = ESPUI.addControl( ControlType::Label, "Temperature [°C]", "", ControlColor::Peterriver,dashboardTab);
   pressureLabelId = ESPUI.addControl( ControlType::Label, "Pressure [hPa]", "", ControlColor::Peterriver,dashboardTab);
   humidityLabelId = ESPUI.addControl( ControlType::Label, "Humidity [%]", "", ControlColor::Peterriver,dashboardTab);
@@ -319,18 +327,11 @@ void loadPreferences()
 
 void operationModeSelector(Control *sender, int type)
 {
-Serial.println(sender->id);
-Serial.println(sender->value);
   int tempOpMode;
   
   if (sender->value == "Manual") tempOpMode = OP_MODE_MANUAL;
   else if (sender->value == "Lux") tempOpMode = OP_MODE_LUX;
   else if (sender->value == "Time") tempOpMode = OP_MODE_TIME;  
-//  Serial.print("tempOpMode: "); Serial.println(tempOpMode); 
-Serial.print("openOperationModeSelectorId: "); Serial.println(openOperationModeSelectorId); 
-Serial.print("closeOperationModeSelectorId: "); Serial.println(closeOperationModeSelectorId); 
-//  Serial.print("ESPUI.getControl(openOperationModeLabelId)->id: "); Serial.println(ESPUI.getControl(openOperationModeLabelId)->id); 
-//  Serial.print("ESPUI.getControl(closeOperationModeLabelId)->id: "); Serial.println(ESPUI.getControl(closeOperationModeLabelId)->id);
   
   if (sender->id == openOperationModeSelectorId) openOperationMode = tempOpMode;
   else if (sender->id == closeOperationModeSelectorId) closeOperationMode = tempOpMode;  
@@ -365,8 +366,6 @@ void buttonHandler(Control *sender, int type)
 
 void textHandler(Control *sender, int type)
 {
-  Serial.println(sender->id);
-  Serial.println(sender->value);
   int tempInt;
   float tempFloat;
   if (sender->id == openingLuxTextId)
@@ -454,12 +453,9 @@ int getHour(String timeString)
 {
   int hourInt = -1;
   int colonIndex = timeString.indexOf(':');
-  Serial.println(colonIndex);
   if (colonIndex > 0)
   {
     hourInt = timeString.substring(0,colonIndex).toInt();
-    Serial.println(timeString.substring(0,colonIndex));
-    Serial.println(hourInt);
   }
   return hourInt;
 }
@@ -471,7 +467,6 @@ int getMinute(String timeString)
   if (colonIndex > 0)
   {
     minuteInt = timeString.substring(colonIndex + 1,timeString.length()).toInt();
-    Serial.println(minuteInt);
   }
   return minuteInt;
 }
@@ -553,33 +548,65 @@ float readLux()
 
 void checkLux()
 {
-  if (lux < closingLux && doorState == DOOR_OPEN) closingLuxTicker.attach(1, checkclosingLuxDuration);
-  if (lux > openingLux && doorState == DOOR_CLOSED) openingLuxTicker.attach(1, checkopeningLuxDuration);
+  if (luxTickerRunning)
+  {
+    //Serial.println("Lux Ticker is already running");
+    return;
+  }
+  if (closeOperationMode == OP_MODE_LUX && lux < closingLux && doorState == DOOR_OPEN) 
+  {
+    String message = "Door closing in " + String(closingLuxDelay - (closingLuxSeconds/60)) + " minutes";
+    ESPUI.print(luxCountdownLabelId, message);
+
+    closingLuxTicker.attach(1, checkClosingLuxDuration);
+    
+    luxTickerRunning = true;
+    return;
+  }
+  if (openOperationMode == OP_MODE_LUX && lux > openingLux && doorState == DOOR_CLOSED) 
+  {
+    String message = "Door opening in " + String(openingLuxDelay - (openingLuxSeconds/60)) + " minutes";
+    ESPUI.print(luxCountdownLabelId, message);
+
+    openingLuxTicker.attach(1, checkOpeningLuxDuration);
+    luxTickerRunning = true;
+    return;
+  }
 }
 
 
 
 void checkClosingLuxDuration()
 {
-  Serial.print("Inside checkclosingLuxDuration for ");
-  Serial.print(closingLuxSeconds );
-  Serial.print(" seconds.");
+//  Serial.print("Inside checkclosingLuxDuration for ");
+//  Serial.print(closingLuxSeconds );
+//  Serial.print(" seconds.");
+  
   if (lux > closingLux)
   {
     Serial.println("Lux above threshold. Stopping door countdown.");
     closingLuxSeconds = 0;
     closingLuxTicker.detach();
+    ESPUI.print(luxCountdownLabelId, "Not ticking");
+    luxTickerRunning = false;
     return;
   }
   closingLuxSeconds++;
-  if (closingLuxSeconds > closingLuxDelay)
+  if (closingLuxSeconds > tempClosingLuxSeconds + 60)
+  {
+    tempClosingLuxSeconds = closingLuxSeconds;
+    String message = String("Door closing in ") + (closingLuxSeconds/60) + String(" minutes");
+    ESPUI.print(luxCountdownLabelId, message);
+  }
+  if (closingLuxSeconds > closingLuxDelay * 60) // the delay is giving in minutes, the counter counts seconds
   {
     closingLuxTicker.detach();
-    
+    luxTickerRunning = false;
     Serial.print("Lux has been below threshold for ");
     Serial.print(closingLuxSeconds);
     Serial.println(" seconds. Closing door. ");
     closeDoor();
+    ESPUI.print(luxCountdownLabelId, "Not ticking");
     closingLuxSeconds = 0;
   }
 }
@@ -587,25 +614,34 @@ void checkClosingLuxDuration()
 
 void checkOpeningLuxDuration()
 {
-  Serial.print("Inside checkopeningLuxDuration for ");
-  Serial.print(openingLuxSeconds );
-  Serial.print(" seconds.");
+//  Serial.print("Inside checkopeningLuxDuration for ");
+//  Serial.print(openingLuxSeconds );
+//  Serial.print(" seconds.");
   if (lux < openingLux)
   {
     Serial.println("Lux below threshold. Stopping door countdown.");
     openingLuxSeconds = 0;
     openingLuxTicker.detach();
+    ESPUI.print(luxCountdownLabelId, "Not ticking");
+    luxTickerRunning = false;
     return;
   }
   openingLuxSeconds++;
-  if (openingLuxSeconds > openingLuxDelay)
+  if (openingLuxSeconds > tempOpeningLuxSeconds + 60)
+  {
+    tempOpeningLuxSeconds = openingLuxSeconds;
+    String message = "Door opening in " + String(openingLuxSeconds/60) + " minutes";
+    ESPUI.print(luxCountdownLabelId, message);
+  }
+  if (openingLuxSeconds > openingLuxDelay * 60)
   {
     openingLuxTicker.detach();
-    
+    luxTickerRunning = false;
     Serial.print("Lux has been above threshold for ");
     Serial.print(openingLuxSeconds);
     Serial.println(" seconds. Opening door. ");
     openDoor();
+    ESPUI.print(luxCountdownLabelId, "Not ticking");
     openingLuxSeconds = 0;
     
   }

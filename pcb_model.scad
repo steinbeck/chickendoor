@@ -1,7 +1,7 @@
 pcb_width = 107;
 pcb_height = 77;
 pcb_thickness = 1;
-edge_cutout_radius = 8;
+edge_cutout_radius = 6;
 mount_hole_radius = 1.5;
 mount_hole_distance_x = 78;
 mount_hole_distance_y = 51;
@@ -9,8 +9,6 @@ bh1750_mount_hole_distance = 8.7;
 bh1750_height = 20;
 ina219_mount_hole_distance_x = 20;
 ina219_mount_hole_distance_y = 17;
-motor_driver_mount_hole_distance = 37;
-
 
 difference()
 {
@@ -33,18 +31,22 @@ difference()
     }
 
     // The four holes to mount the PCB to the case
+
     translate([(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2,-.5])
     {
         mount_hole();
     }
+
     translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2,-.5])
     {
         mount_hole();
     }
+    
     translate([(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
     {
         mount_hole();
     }
+
     translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
     {
         mount_hole();
@@ -56,50 +58,32 @@ difference()
     {
         mount_hole();
     }
+    
     translate([(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2 + 10,-.5])
     {
         mount_hole();
     }
     
     // The single mount hole for the BME208
+    
     translate([(pcb_width - mount_hole_distance_x)/2 - bh1750_mount_hole_distance, (pcb_height - mount_hole_distance_y)/2 +  10 + bh1750_height + 5,-.5])
     {
         mount_hole();
     }
-    
+
     // Four holes for the INA219 Current Sensor
-    translate([pcb_width/2 + 5, 3,-.5])
-    {
-        mount_hole();
-    }
-    translate([pcb_width/2 + 5 + ina219_mount_hole_distance_x, 3,-.5])
-    {
-        mount_hole();
-    }
-    translate([pcb_width/2 + 5, 3 + ina219_mount_hole_distance_y,-.5])
-    {
-        mount_hole();
-    }
-    translate([pcb_width/2 + 5 + ina219_mount_hole_distance_x, 3 + ina219_mount_hole_distance_y,-.5])
+    
+    translate([pcb_width/2 + 5, 5,-.5])
     {
         mount_hole();
     }
 
-    // three holes for the motor driver
-    translate([pcb_width-(pcb_width - mount_hole_distance_x)/2 - motor_driver_mount_hole_distance, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
+    translate([pcb_width/2 + 5 , 5,-.5])
     {
         mount_hole();
-    }    
-    translate([pcb_width-(pcb_width - mount_hole_distance_x)/2 - motor_driver_mount_hole_distance, pcb_height - (pcb_height - mount_hole_distance_y)/2 - motor_driver_mount_hole_distance,-.5])
-    {
-        mount_hole();
-    }    
+    }
 
-    translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2 - motor_driver_mount_hole_distance,-.5])
-    {
-        mount_hole();
-    }    
-
+    
     
 }
 
