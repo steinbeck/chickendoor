@@ -37,6 +37,6 @@ The mechanism was first setup on a piece of plywood so I could carry it around a
 
 ![Breadboard prototype of chicken door mechanism](/images/chicken-door-breadboard.png)
 
-The mounts that came with the actuator where useless as too short to mount the actuator for vertical operation, so I designed a mount in OpenSCAD and 3D printed it on my ender3. I eventually ordered the part in PA2020 (Nylon), 3D printed with Selective Laser Sintering (SLS), from RapidObject GMBH in Germany for maximum strength and durability.
+The mounts that came with the actuator where useless as too short to mount the actuator for vertical operation, so I designed a [mount in OpenSCAD](https://github.com/steinbeck/chickendoor/blob/main/actuator_mount.scad) and 3D printed it on my ender3. I eventually ordered the part in PA2020 (Nylon), 3D printed with Selective Laser Sintering (SLS), from [RapidObject GMBH](https://www.rapidobject.com/) in Germany for maximum strength and durability.
 
-
+![3D model of actuator mount](/images/actuator-mount.png)
