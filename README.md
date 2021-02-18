@@ -18,9 +18,12 @@ Ok, so much for the motivation for this project. Here are the specs:
 
 ## Web interface
 I decided to build this device without a display and without the possiblity to adjust the settings directly at the device, apart from the two buttons to open and close the door. 
-Instead, I added a web interface with a dashboard with two virtual buttons to open and close the door as well as some status information and sensor readings. And there is a settings panel. 
+Instead, I added a web interface with a dashboard with two virtual buttons to open and close the door as well as some status information and sensor readings. 
 
 ![dashboard](/images/dashboard.png)
+
+And there is a settings panel. 
+
 ![settings](/images/settings.png)
 
 
