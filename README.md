@@ -21,7 +21,7 @@ Ok, so much for the motivation for this project. Here are the specs:
 * A current sensor that notices when the built-in end stops of the actuator have switched the device off, so the system knows when the door is fully open or closed. 
 * Web interface for the settings and sensor readings. 
 
-![Breadboard prototype of chicken door mechanism](/images/chicken-door-breadboard)
+![Breadboard prototype of chicken door mechanism](/images/chicken-door-breadboard.png)
 
 
 ## Web interface
