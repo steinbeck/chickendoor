@@ -2,7 +2,8 @@
 ## Introduction
 This is code for an ESP32-based Internet-of-Things (IoT) chicken door. We have a [Heini Koop chicken coop](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/), but the principle of this door mechanism is generic and should work with sliding and other doors.
 
-![Heini Koop Uno](https://www.heinicoop.de/wp-content/uploads/2017/10/huehnerstall-uno-garten.jpg) (c) Heini Koop. Picture from [Heini Koop Website](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/)
+![Heini Koop Uno](https://www.heinicoop.de/wp-content/uploads/2017/10/huehnerstall-uno-garten.jpg) 
+(c) Heini Koop. Picture from [Heini Koop Website](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/)
 
 The ESP is hooked up to a BME280 climate sensor (not needed, just for fun) as well as a BH1750 light sensor, as well as a DC motordriver connected to a 30 cm DC actuator to open and close the door. We currently have a [ChickenGuard(TM)](https://www.chickenguard.de/) module to close and open the door. It works well, but lacks the Internet access. If you do not need the IoT functionality and do not want to tinker, go for the ChickenGuard(TM).
 If, say, you are away from home and decide that you want to let the chicken out manually tomorrow, but the door is in lux-mode (opens when a certain amount of daylight is reached) then you need to live with the situation. 
@@ -18,7 +19,8 @@ Ok, so much for the motivation for this project. Here are the specs:
 * BME280 for temperature, humidity and pressure
 * Manual opening and closing with two buttons at the device. 
 * A current sensor that notices when the built-in end stops of the actuator have switched the device off, so the system knows when the door is fully open or closed. 
-* Web interface for the settings and sensor readings. 
+* Web interface for the settings and sensor readings.
+* Linear actuator with 30 cm range of operation, IP66 approved for outdoor application. 
 
 ## Web interface
 I decided to build this device without a display and without the possiblity to adjust the settings directly at the device, apart from the two buttons to open and close the door. 
@@ -29,5 +31,12 @@ Instead, I added a web interface with a dashboard with two virtual buttons to op
 And there is a settings panel. 
 
 ![settings](/images/settings.png)
+
+## Development
+The mechanism was first setup on a piece of plywood so I could carry it around and test and develop wherever I wanted:
+
+![Breadboard prototype of chicken door mechanism](/images/chicken-door-breadboard.png)
+
+The mounts that came with the actuator where useless as too short to mount the actuator for vertical operation, so I designed a mount in OpenSCAD and 3D printed it on my ender3. I eventually ordered the part in PA2020 (Nylon), 3D printed with Selective Laser Sintering (SLS), from RapidObject GMBH in Germany for maximum strength and durability.
 
 
