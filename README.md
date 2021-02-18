@@ -2,7 +2,8 @@
 ## Introduction
 This is code for an ESP32-based Internet-of-Things (IoT) chicken door. We have a [Heini Koop chicken coop](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/), but the principle of this door mechanism is generic and should work with sliding and other doors.
 
-![Heini Koop Uno](https://www.heinicoop.de/wp-content/uploads/2017/10/huehnerstall-uno-garten.jpg) (c) Heini Koop. Picture from [Heini Koop Website](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/)
+![Heini Koop Uno](https://www.heinicoop.de/wp-content/uploads/2017/10/huehnerstall-uno-garten.jpg) 
+(c) Heini Koop. Picture from [Heini Koop Website](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/)
 
 The ESP is hooked up to a BME280 climate sensor (not needed, just for fun) as well as a BH1750 light sensor, as well as a DC motordriver connected to a 30 cm DC actuator to open and close the door. We currently have a [ChickenGuard(TM)](https://www.chickenguard.de/) module to close and open the door. It works well, but lacks the Internet access. If you do not need the IoT functionality and do not want to tinker, go for the ChickenGuard(TM).
 If, say, you are away from home and decide that you want to let the chicken out manually tomorrow, but the door is in lux-mode (opens when a certain amount of daylight is reached) then you need to live with the situation. 
@@ -19,6 +20,9 @@ Ok, so much for the motivation for this project. Here are the specs:
 * Manual opening and closing with two buttons at the device. 
 * A current sensor that notices when the built-in end stops of the actuator have switched the device off, so the system knows when the door is fully open or closed. 
 * Web interface for the settings and sensor readings. 
+
+![Breadboard prototype of chicken door mechanism](/images/chicken-door-breadboard)
+
 
 ## Web interface
 I decided to build this device without a display and without the possiblity to adjust the settings directly at the device, apart from the two buttons to open and close the door. 
