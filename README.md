@@ -2,7 +2,7 @@
 ## Introduction
 This is code for an ESP32-based Internet-of-Things (IoT) chicken door. We have a [Heini Koop chicken coop](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/), but the principle of this door mechanism is generic and should work with sliding and other doors.
 
-![Heini Koop Uno](https://www.heinicoop.de/wp-content/uploads/2017/10/huehnerstall-uno-garten.jpg)"(c) Heini Koop. Picture from [Heini Koop Website](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/)
+![Heini Koop Uno](https://www.heinicoop.de/wp-content/uploads/2017/10/huehnerstall-uno-garten.jpg) (c) Heini Koop. Picture from [Heini Koop Website](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/)
 
 The ESP is hooked up to a BME280 climate sensor (not needed, just for fun) as well as a BH1750 light sensor, as well as a DC motordriver connected to a 30 cm DC actuator to open and close the door. We currently have a ChickenGuard(TM) module to close and open the door. It works well, but lacks the Internet access. If, say, you are away from home and decide that you want to let the chicken out manually tomorrow, but the door is in lux-mode (opens when a certain amount of daylight is reached) then you need to live with the situation. 
 Furthermore, if you discover on your coop camera :) that one of the chicken didn't get in before the door closed automatically in the evening and you are not at home, you cannot open the door remotely to let the late-comer in. In our rural area, the likelihood is high that you have one saturated predetor more in the area and one chicken less. 
