@@ -10,83 +10,87 @@ bh1750_height = 20;
 ina219_mount_hole_distance_x = 20;
 ina219_mount_hole_distance_y = 17;
 
-difference()
-{
-    cube([pcb_width, pcb_height, pcb_thickness]);  
-    translate([0,0,-.5])
-    {
-        edge_cutout();
-    }
-    translate([0,pcb_height,-.5])
-    {
-        edge_cutout();
-    }
-    translate([pcb_width,0,-.5])
-    {
-        edge_cutout();
-    }
-    translate([pcb_width,pcb_height,-.5])
-    {
-        edge_cutout();
-    }
+projection() pcb();
 
-    // The four holes to mount the PCB to the case
+module pcb(){
+    
+    difference()
+    {
+        cube([pcb_width, pcb_height, pcb_thickness]);  
+        translate([0,0,-.5])
+        {
+            edge_cutout();
+        }
+        translate([0,pcb_height,-.5])
+        {
+            edge_cutout();
+        }
+        translate([pcb_width,0,-.5])
+        {
+            edge_cutout();
+        }
+        translate([pcb_width,pcb_height,-.5])
+        {
+            edge_cutout();
+        }
 
-    translate([(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2,-.5])
-    {
-        mount_hole();
-    }
+        // The four holes to mount the PCB to the case
 
-    translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2,-.5])
-    {
-        mount_hole();
-    }
-    
-    translate([(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
-    {
-        mount_hole();
-    }
+        translate([(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2,-.5])
+        {
+            mount_hole();
+        }
 
-    translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
-    {
-        mount_hole();
-    }    
-    
-    // The two mount holes for the BH1750 light sensor
-    
-    translate([(pcb_width - mount_hole_distance_x)/2 - bh1750_mount_hole_distance, (pcb_height - mount_hole_distance_y)/2 +  10,-.5])
-    {
-        mount_hole();
-    }
-    
-    translate([(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2 + 10,-.5])
-    {
-        mount_hole();
-    }
-    
-    // The single mount hole for the BME208
-    
-    translate([(pcb_width - mount_hole_distance_x)/2 - bh1750_mount_hole_distance, (pcb_height - mount_hole_distance_y)/2 +  10 + bh1750_height + 5,-.5])
-    {
-        mount_hole();
-    }
+        translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2,-.5])
+        {
+            mount_hole();
+        }
+        
+        translate([(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
+        {
+            mount_hole();
+        }
 
-    // Four holes for the INA219 Current Sensor
-    
-    translate([pcb_width/2 + 5, 5,-.5])
-    {
-        mount_hole();
-    }
+        translate([pcb_width-(pcb_width - mount_hole_distance_x)/2, pcb_height - (pcb_height - mount_hole_distance_y)/2,-.5])
+        {
+            mount_hole();
+        }    
+        
+        // The two mount holes for the BH1750 light sensor
+        
+        translate([(pcb_width - mount_hole_distance_x)/2 - bh1750_mount_hole_distance, (pcb_height - mount_hole_distance_y)/2 +  10,-.5])
+        {
+            mount_hole();
+        }
+        
+        translate([(pcb_width - mount_hole_distance_x)/2, (pcb_height - mount_hole_distance_y)/2 + 10,-.5])
+        {
+            mount_hole();
+        }
+        
+        // The single mount hole for the BME208
+        
+        translate([(pcb_width - mount_hole_distance_x)/2 - bh1750_mount_hole_distance, (pcb_height - mount_hole_distance_y)/2 +  10 + bh1750_height + 5,-.5])
+        {
+            mount_hole();
+        }
 
-    translate([pcb_width/2 + 5 , 5,-.5])
-    {
-        mount_hole();
-    }
+        // Four holes for the INA219 Current Sensor
+        
+        translate([pcb_width/2 + 5, 5,-.5])
+        {
+            mount_hole();
+        }
 
-    
-    
+        translate([pcb_width/2 + 5 , 5,-.5])
+        {
+            mount_hole();
+        }
+
+        
+        
+    }
 }
-
 
 module edge_cutout()
 {
