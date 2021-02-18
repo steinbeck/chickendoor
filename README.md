@@ -10,7 +10,7 @@ Ok, so much for the motivation for this project. Here are the specs:
 ## Specifications
 
 * 3 modes (manual-, time-based, light-based operation), independently selectable for opening and closing (e.g. open every morning at 8am, but close at night when the light is low).
-* This obviously requires a light sensor. This one has a BH1750.
+* This obviously requires a light sensor. This one has a BH1750. You can also set a delay. If the light has been below or above threshold for a certain number of minutes, the door moves. 
 * BME280 for temperature, humidity and pressure
 * Manual opening and closing with two buttons at the device. 
 * A current sensor that notices when the built-in end stops of the actuator have switched the device off, so the system knows when the door is fully open or closed. 
