@@ -33,7 +33,13 @@ And there is a settings panel.
 ![settings](/images/settings.png)
 
 ## Development
+
+
 The mechanism was first setup on a piece of plywood so I could carry it around and test and develop wherever I wanted:
+
+![Breadboard prototype of chicken door mechanism](/images/chickendoor-prototype.png)
+
+Here is the fritzing schema (yes, I am sure this can be done nicer :)):
 
 ![Breadboard prototype of chicken door mechanism](/images/chickendoor-breadboard.png)
 
