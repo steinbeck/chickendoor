@@ -33,9 +33,15 @@ And there is a settings panel.
 ![settings](/images/settings.png)
 
 ## Development
+
+
 The mechanism was first setup on a piece of plywood so I could carry it around and test and develop wherever I wanted:
 
-![Breadboard prototype of chicken door mechanism](/images/chicken-door-breadboard.png)
+![Breadboard prototype of chicken door mechanism](/images/chickendoor-prototype.png)
+
+Here is the fritzing schema (yes, I am sure this can be done nicer :)):
+
+![Breadboard prototype of chicken door mechanism](/images/chickendoor-breadboard.png)
 
 The mounts that came with the actuator where useless as too short to mount the actuator for vertical operation, so I designed a [mount in OpenSCAD](https://github.com/steinbeck/chickendoor/blob/main/actuator_mount.scad) and 3D printed it on my ender3. I eventually ordered the part in PA2020 (Nylon), 3D printed with Selective Laser Sintering (SLS), from [RapidObject GMBH](https://www.rapidobject.com/) in Germany for maximum strength and durability.
 
