@@ -1,0 +1,63 @@
+front = chickendoor-new_copperTop.gtl
+back = chickendoor-new_copperBottom.gbl
+drill = chickendoor-new_drill.txt
+outline = chickendoor-new_contour.gm1
+ 
+# This is an example config file for pcb2gcode.
+# Rename this file "millproject" and place it in the same directory as your
+# gerber files to save typing
+# <option>=false is implicit, it is present just for clearness
+
+# You may want to uncomment and change those in local project files (or you
+# can specify them directly as command line arguments)
+#front=board.front.gbr
+#back=board.back.gbr
+#outline=board.outline.gbr
+#drill=board.plated-drill.drl
+#preamble=preamble.ngc
+#preamble-text=preamble_text.txt
+#postamble=postamble.ngc
+
+# Common options
+metric=true
+metricoutput=true
+zchange=10.0000
+zero-start=true
+zsafe=5.0000
+
+# Mill options
+extra-passes=0
+mill-feed=600
+mill-speed=10000
+offset=0.1000
+#offset=20  # Uncomment (and comment the previous line) for voronoi regions
+zwork=-0.0500
+
+# Drill options
+drill-feed=1000
+drill-side=auto
+drill-speed=10000
+milldrill=false
+nog81=false
+onedrill=false
+zdrill=-2.5000
+
+# Outline options
+bridges=0.5000
+bridgesnum=2
+cut-feed=600
+cut-side=auto
+cut-infeed=10.0000
+cut-speed=10000
+cutter-diameter=3.0000
+fill-outline=true
+zbridges=-0.6000
+zcut=-2.5000
+
+# Autoleveller options
+al-back=false
+al-front=false
+al-probefeed=100
+al-x=15.0000
+al-y=15.0000
+software=LinuxCNC

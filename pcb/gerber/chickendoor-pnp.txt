@@ -1,0 +1,51 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=chickendoor-new
+*Date=16:58:04
+*CreatedBy=Fritzing 0.9.4.2019-12-01.CD-498-0-a1ffcea
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;;66.6505;-72.0746;0;Bottom;Via31
+2;;;13.3105;-18.7346;0;Bottom;Via24
+3;;;69.1905;-72.0746;0;Bottom;Via32
+4;;;61.5705;-72.0746;0;Bottom;Via29
+5;;;48.8705;-49.2146;0;Bottom;Via10
+6;;;13.3105;-69.5346;0;Bottom;Via21
+7;;;48.8705;-41.5946;0;Bottom;Via5
+8;;;53.9505;-39.0546;0;Bottom;Via4
+9;;;51.4105;-39.0546;0;Bottom;Via3
+10;;;48.8705;-72.0746;0;Bottom;Via14
+11;;;48.8705;-59.3746;0;Bottom;Via12
+12;;;10.7705;-18.7346;0;Bottom;Via25
+13;;THT;50.2675;-5.52658;90;Bottom;J1
+14;;;13.3105;-44.1346;0;Bottom;Via19
+15;;;51.4105;-54.2946;0;Bottom;Via15
+16;;;71.7305;-72.0746;0;Bottom;Via33
+17;;;5.69049;-18.7346;0;Bottom;Via35
+18;;;13.3105;-41.5946;0;Bottom;Via20
+19;;;48.8705;-54.2946;0;Bottom;Via11
+20;;;10.7705;-69.5346;0;Bottom;Via22
+21;;;51.4105;-72.0746;0;Bottom;Via18
+22;;;56.4905;-72.0746;0;Bottom;Via27
+23;;;8.23049;-69.5346;0;Bottom;Via23
+24;;;48.8705;-13.6546;0;Bottom;Via36
+25;;;51.4105;-61.9146;0;Bottom;Via17
+26;;;51.4105;-41.5946;0;Bottom;Via6
+27;;;30.9498;-44.4117;90;Bottom;U1
+28;;;5.69049;-69.5346;0;Bottom;Via34
+29;;;51.4105;-59.3746;0;Bottom;Via16
+30;;;48.8705;-61.9146;0;Bottom;Via13
+31;;;48.8705;-46.6746;0;Bottom;Via8
+32;;;53.9505;-41.5946;0;Bottom;Via7
+33;;;64.1105;-72.0746;0;Bottom;Via30
+34;;;48.8705;-39.0546;0;Bottom;Via2
+35;;;8.23049;-18.7346;0;Bottom;Via26
+36;;;59.0305;-72.0746;0;Bottom;Via28
