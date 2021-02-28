@@ -22,6 +22,19 @@ Ok, so much for the motivation for this project. Here are the specs:
 * Web interface for the settings and sensor readings.
 * Linear actuator with 30 cm range of operation, IP66 approved for outdoor application. 
 
+## Software
+More todo here
+
+Turns out that the ESP32 dev module can be picky with regard to which pins you can use for what. I tried around a bit and the following pins work for me:
+
+* SDA 16
+* SCL 17
+* Motor_Pin_1 18
+* Motor_Pin_2 19
+* Button_1 26
+* Button_2 27
+
+
 ## Web interface
 I decided to build this device without a display and without the possiblity to adjust the settings directly at the device, apart from the two buttons to open and close the door. 
 Instead, I added a web interface with a dashboard with two virtual buttons to open and close the door as well as some status information and sensor readings. 
