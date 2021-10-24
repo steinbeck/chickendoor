@@ -40,9 +40,6 @@ DNSServer dnsServer;
 const char* OTA_INDEX PROGMEM
     = R"=====(<!DOCTYPE html><html><head><meta charset=utf-8><title>OTA</title></head><body><div class="upload"><form method="POST" action="/ota" enctype="multipart/form-data"><input type="file" name="data" /><input type="submit" name="upload" value="Upload" title="Upload Files"></form></div></body></html>)=====";
 
-
-
-
 #include "secrets.h"
 
 #define DOOR_UNDEFINED 0
@@ -52,15 +49,13 @@ const char* OTA_INDEX PROGMEM
 #define OP_MODE_LUX 1
 #define OP_MODE_TIME 2
 
-
 Adafruit_INA219 ina219;
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWD;
-const char* ota_user = OTA_USER;
-const char* ota_password = OTA_PASSWORD;
 
 
 // Replace with your unique IFTTT URL resource
+// Follow https://randomnerdtutorials.com/esp32-esp8266-publish-sensor-readings-to-google-sheets/
 const char* resource = GOOGLE_API_KEY;
 
 // Maker Webhooks IFTTT
@@ -815,6 +810,9 @@ float readCurrent()
   //Serial.print("Current: "); Serial.print(current_mA); Serial.println(" mA");
   return current_mA; 
 }
+
+// The following methods is from https://randomnerdtutorials.com/esp32-esp8266-publish-sensor-readings-to-google-sheets/
+// to log messages to a google sheet using webhooks from IFTTT
 
 void writelog(String message) {
   Serial.print("Connecting to "); 
