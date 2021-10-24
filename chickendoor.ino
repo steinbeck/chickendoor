@@ -12,6 +12,7 @@
 #include <SPIFFSEditor.h>
 #include <WebHandlerImpl.h>
 #include <ESPAsyncWebServer.h>
+#include <AsyncElegantOTA.h>
 #include <WebAuthentication.h>
 #include <AsyncWebSynchronization.h>
 #include <AsyncWebSocket.h>
@@ -22,6 +23,8 @@
 
 #include <DNSServer.h>
 #include <ESPUI.h>
+#include <Update.h>
+
 
 const byte DNS_PORT = 53;
 IPAddress apIP(192, 168, 1, 1);
@@ -32,6 +35,12 @@ DNSServer dnsServer;
 #else
 #include <ESP8266WiFi.h>
 #endif
+
+//OTA with ESPUI solution thanks to user ENWI (https://githubmemory.com/repo/s00500/ESPUI/issues/116)
+const char* OTA_INDEX PROGMEM
+    = R"=====(<!DOCTYPE html><html><head><meta charset=utf-8><title>OTA</title></head><body><div class="upload"><form method="POST" action="/ota" enctype="multipart/form-data"><input type="file" name="data" /><input type="submit" name="upload" value="Upload" title="Upload Files"></form></div></body></html>)=====";
+
+
 
 
 #include "secrets.h"
@@ -47,6 +56,16 @@ DNSServer dnsServer;
 Adafruit_INA219 ina219;
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWD;
+const char* ota_user = OTA_USER;
+const char* ota_password = OTA_PASSWORD;
+
+
+// Replace with your unique IFTTT URL resource
+const char* resource = GOOGLE_API_KEY;
+
+// Maker Webhooks IFTTT
+const char* server = "maker.ifttt.com";
+
 Timezone myTZ;
 BH1750 lightMeter;
 BME280I2C bme;
@@ -72,6 +91,8 @@ uint16_t pressureLabelId;
 uint16_t humidityLabelId;
 uint16_t currentLabelId;
 uint16_t doorStateLabelId;
+uint16_t logfileLabelId;
+
 uint16_t openOperationModeSelectorId;
 uint16_t closeOperationModeSelectorId;
 uint16_t openOperationModeLabelId;
@@ -148,7 +169,7 @@ Ticker checkLuxTicker;
 Ticker buttonTicker;
 Ticker startMotorTicker;
 Ticker motorRunningSecondsCounter;
-
+Ticker networkAliveTicker;
 
 
 void setup() {
@@ -174,6 +195,8 @@ void setup() {
   waitForSync();
   Serial.print("Wifi connected with IP ");
   Serial.println(WiFi.localIP());
+  writelog("Chicken Door Control (re)started");
+  writelog(String(WiFi.localIP().toString().c_str()));
   myTZ.setLocation(F("Europe/Berlin"));
   loadPreferences();
   setupWebUI();
@@ -181,6 +204,7 @@ void setup() {
   pinMode(downButtonPin, INPUT_PULLDOWN);
   lightMeter.begin();
   bme.begin();
+  networkAliveTicker.attach(20, checkNetworkAlive);
   
 }
 
@@ -231,23 +255,38 @@ void setupWebUI()
   closeButtonId = ESPUI.addControl( ControlType::Button, "Door Control", "Close Door", ControlColor::Emerald,dashboardTab, &buttonHandler);
   
   dateTimeLabelId = ESPUI.addControl( ControlType::Label, "Date/Time", "", ControlColor::Peterriver,dashboardTab);
-  openOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Opening Mode", "", ControlColor::Peterriver,dashboardTab);
-  closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver,dashboardTab);
-  doorStateLabelId = ESPUI.addControl( ControlType::Label, "Door State", "", ControlColor::Peterriver,dashboardTab);
+  
   luxLabelId = ESPUI.addControl( ControlType::Label, "Lux", "lux", ControlColor::Peterriver,dashboardTab);
   luxCountdownLabelId = ESPUI.addControl( ControlType::Label, "Lux Countdown", "Not ticking", ControlColor::Peterriver,dashboardTab);
+  doorStateLabelId = ESPUI.addControl( ControlType::Label, "Door State", "", ControlColor::Peterriver,dashboardTab);
   temperatureLabelId = ESPUI.addControl( ControlType::Label, "Temperature [°C]", "", ControlColor::Peterriver,dashboardTab);
   pressureLabelId = ESPUI.addControl( ControlType::Label, "Pressure [hPa]", "", ControlColor::Peterriver,dashboardTab);
   humidityLabelId = ESPUI.addControl( ControlType::Label, "Humidity [%]", "", ControlColor::Peterriver,dashboardTab);
   currentLabelId = ESPUI.addControl( ControlType::Label, "Current [mA]", "", ControlColor::Peterriver,dashboardTab);
+  openOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Opening Mode", "", ControlColor::Peterriver,dashboardTab);
+  closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver,dashboardTab);
   
-  
+  //logfileLabelId = ESPUI.addControl( ControlType::Label, "logfile", "", ControlColor::Peterriver,dashboardTab);
+    
   ESPUI.begin("ChickenDoor Control");
+  ESPUI.server->on("/ota", 
+        HTTP_POST, 
+        [](AsyncWebServerRequest* request) { request->send(200); }, 
+        handleOTAUpload);
+
+  ESPUI.server->on("/ota", 
+        HTTP_GET, 
+        [](AsyncWebServerRequest* request) {
+            AsyncWebServerResponse* response = request->beginResponse_P(200, "text/html", OTA_INDEX);
+            request->send(response);
+        }
+    );
   
 }
 
 void updateWebUI()
 {
+  String message;
   if (millis() - oldTime > 5000) {
     readLux();
     readClimateData();
@@ -278,23 +317,31 @@ void updateWebUI()
         ESPUI.print(openOperationModeLabelId, modeStrings[0]);
         break;
       case OP_MODE_LUX:
-        ESPUI.print(openOperationModeLabelId, modeStrings[1]);
+        message = modeStrings[1];
+        message +=" > "; message+= openingLux; message += ", delay "; message += openingLuxDelay; message += " min";
+        ESPUI.print(openOperationModeLabelId, message);
         break;
       case OP_MODE_TIME:
-        ESPUI.print(openOperationModeLabelId, modeStrings[2]);
+        message = modeStrings[2];
+        message +=" "; message+= openingTime; 
+        ESPUI.print(openOperationModeLabelId, message);
         break;
     }
 
     switch(closeOperationMode)
     {
       case OP_MODE_MANUAL:
-        ESPUI.print(closeOperationModeLabelId, "Manual");
+        ESPUI.print(closeOperationModeLabelId, modeStrings[0]);
         break;
       case OP_MODE_LUX:
-        ESPUI.print(closeOperationModeLabelId, "Lux");
+        message = modeStrings[1];
+        message +=" < "; message+= closingLux; message += ", delay "; message += closingLuxDelay; message += " min";
+        ESPUI.print(closeOperationModeLabelId, message);
         break;
       case OP_MODE_TIME:
-        ESPUI.print(closeOperationModeLabelId, "Time");
+        message = modeStrings[2];
+        message +=" "; message+= openingTime;
+        ESPUI.print(closeOperationModeLabelId, message);
         break;
     }    
     oldTime = millis();
@@ -324,8 +371,8 @@ void loadPreferences()
   // postprocessing of preferences
   if (tempDoorState == 0) 
   {
-    Serial.println("door state undefined. Cycling door states ...");
-   // cycleDoor();
+    writelog("door state undefined. Cycling door states ...");
+    checkDoorCycled();
   }
   else doorState = tempDoorState;
 
@@ -481,7 +528,7 @@ int getMinute(String timeString)
 
 void openDoor()
 {
-  Serial.println("call to openDoor");
+  writelog("call to openDoor");
   if (motorRunning == false)
   {
     moveDoor(motorPinBackward);  
@@ -489,15 +536,15 @@ void openDoor()
     preferences.begin("chickendoor", false);
     preferences.putUInt("doorstate", doorState);
     preferences.end(); 
-    Serial.println("Starting to open door ...");
-    Serial.println("Setting door state to UNDEFINED");
+    writelog("Starting to open door ...");
+    writelog("Setting door state to UNDEFINED");
   }
   else Serial.println("Motor already moving");
 }
 
 void closeDoor()
 {
-  Serial.println("call to closeDoor");
+  writelog("call to closeDoor");
   if (motorRunning == false)
   {
     moveDoor(motorPinForward);  
@@ -505,8 +552,8 @@ void closeDoor()
     preferences.begin("chickendoor", false);
     preferences.putUInt("doorstate", doorState);
     preferences.end();
-    Serial.println("Starting to close door ...");
-    Serial.println("Setting door state to UNDEFINED");
+    writelog("Starting to close door ...");
+    writelog("Setting door state to UNDEFINED");
   }
   else Serial.println("Motor already moving");}
 
@@ -524,7 +571,7 @@ void checkMotorRunning()
   if (motorRunning == false) return;
   if (readCurrent() < 10.0) 
   {
-    Serial.println("Switching motor off");
+    writelog("Switching motor off");
     digitalWrite(motorNumberPin, LOW); 
     motorRunning = false;
     if (motorNumberPin == motorPinForward)
@@ -533,7 +580,7 @@ void checkMotorRunning()
     preferences.begin("chickendoor", false);
     preferences.putUInt("doorstate", doorState);
     preferences.end(); 
-    Serial.println("Written DOOR_CLOSED to settings");
+    writelog("Written DOOR_CLOSED to settings");
     }
     else
     {
@@ -541,7 +588,7 @@ void checkMotorRunning()
     preferences.begin("chickendoor", false);
     preferences.putUInt("doorstate", doorState);
     preferences.end(); 
-    Serial.println("Written DOOR_OPEN to settings");
+    writelog("Written DOOR_OPEN to settings");
     }
   }
 }
@@ -598,17 +645,28 @@ void checkTime()
   }
 }
 
-
+void checkNetworkAlive()
+{
+    if ((WiFi.status() != WL_CONNECTED)) {
+    WiFi.disconnect();
+    WiFi.reconnect();
+    writelog("Lost network. Now successfully reconnected to WIFI network");
+    }
+    else
+    {
+      Serial.println("Network still alive");
+    }
+}
 
 void checkClosingLuxDuration()
 {
 //  Serial.print("Inside checkclosingLuxDuration for ");
 //  Serial.print(closingLuxSeconds );
 //  Serial.print(" seconds.");
-  
+  String message;
   if (lux > closingLux)
   {
-    Serial.println("Lux above threshold. Stopping door countdown.");
+    writelog("Lux above threshold. Stopping door countdown.");
     closingLuxSeconds = 0;
     closingLuxTicker.detach();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
@@ -619,16 +677,19 @@ void checkClosingLuxDuration()
   if (closingLuxSeconds > tempClosingLuxSeconds + 60)
   {
     tempClosingLuxSeconds = closingLuxSeconds;
-    String message = String("Door closing in ") + (closingLuxSeconds/60) + String(" minutes");
+    String message = String("Door closing in ") + (closingLuxDelay-(closingLuxSeconds/60)) + String(" minutes");
     ESPUI.print(luxCountdownLabelId, message);
   }
   if (closingLuxSeconds > closingLuxDelay * 60) // the delay is giving in minutes, the counter counts seconds
   {
     closingLuxTicker.detach();
     luxTickerRunning = false;
-    Serial.print("Lux has been below threshold for ");
-    Serial.print(closingLuxSeconds);
-    Serial.println(" seconds. Closing door. ");
+    
+    message = "Lux has been below threshold for ";
+    message.concat(closingLuxSeconds);
+    message.concat(" seconds. Closing door. ");
+    writelog(message);
+    
     closeDoor();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
     closingLuxSeconds = 0;
@@ -641,9 +702,10 @@ void checkOpeningLuxDuration()
 //  Serial.print("Inside checkopeningLuxDuration for ");
 //  Serial.print(openingLuxSeconds );
 //  Serial.print(" seconds.");
+  String message;
   if (lux < openingLux)
   {
-    Serial.println("Lux below threshold. Stopping door countdown.");
+    writelog("Lux below threshold. Stopping door countdown.");
     openingLuxSeconds = 0;
     openingLuxTicker.detach();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
@@ -654,7 +716,7 @@ void checkOpeningLuxDuration()
   if (openingLuxSeconds > tempOpeningLuxSeconds + 60)
   {
     tempOpeningLuxSeconds = openingLuxSeconds;
-    String message = "Door opening in " + String(openingLuxSeconds/60) + " minutes";
+    String message = "Door opening in " + String(openingLuxDelay-(openingLuxSeconds/60)) + " minutes";
     ESPUI.print(luxCountdownLabelId, message);
   }
   if (openingLuxSeconds > openingLuxDelay * 60)
@@ -664,6 +726,12 @@ void checkOpeningLuxDuration()
     Serial.print("Lux has been above threshold for ");
     Serial.print(openingLuxSeconds);
     Serial.println(" seconds. Opening door. ");
+    
+    message = "Lux has been above threshold for ";
+    message.concat(openingLuxSeconds);
+    message.concat(" seconds. Opening door. ");
+    writelog(message);
+    
     openDoor();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
     openingLuxSeconds = 0;
@@ -719,7 +787,7 @@ if (downButtonState == 1) closeDoor();
 
 boolean checkDoorCycled()
 {
-  Serial.println("Cycling door to get to defined state");
+  writelog("Cycling door to get to defined state");
   if (doorState == DOOR_UNDEFINED)
   closeDoor();
   delay(1000);
@@ -746,4 +814,97 @@ float readCurrent()
   
   //Serial.print("Current: "); Serial.print(current_mA); Serial.println(" mA");
   return current_mA; 
+}
+
+void writelog(String message) {
+  Serial.print("Connecting to "); 
+  Serial.print(server);
+  Serial.print("About to log message: ");
+  Serial.print(message);
+  
+  WiFiClient client;
+  int retries = 5;
+  while(!!!client.connect(server, 80) && (retries-- > 0)) {
+    Serial.print(".");
+  }
+  Serial.println();
+  if(!!!client.connected()) {
+    Serial.println("Failed to connect...");
+  }
+  
+  Serial.print("Request resource: "); 
+  Serial.println(resource);
+
+  // Temperature in Celsius
+  String jsonObject = String("{\"value1\":\"") + message + "\"}";
+                      
+  // Comment the previous line and uncomment the next line to publish temperature readings in Fahrenheit                    
+  /*String jsonObject = String("{\"value1\":\"") + (1.8 * bme.readTemperature() + 32) + "\",\"value2\":\"" 
+                      + (bme.readPressure()/100.0F) + "\",\"value3\":\"" + bme.readHumidity() + "\"}";*/
+                      
+  client.println(String("POST ") + resource + " HTTP/1.1");
+  client.println(String("Host: ") + server); 
+  client.println("Connection: close\r\nContent-Type: application/json");
+  client.print("Content-Length: ");
+  client.println(jsonObject.length());
+  client.println();
+  client.println(jsonObject);
+        
+  int timeout = 5 * 10; // 5 seconds             
+  while(!!!client.available() && (timeout-- > 0)){
+    delay(100);
+  }
+  if(!!!client.available()) {
+    Serial.println("No response...");
+  }
+  while(client.available()){
+    Serial.write(client.read());
+  }
+  
+  Serial.println("\nclosing connection");
+  client.stop(); 
+}
+
+
+void handleOTAUpload(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final)
+{
+    if (!index)
+    {
+        Serial.printf("UploadStart: %s\n", filename.c_str());
+         // calculate sketch space required for the update, for ESP32 use the max constant
+#if defined(ESP32)
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN))
+#else
+        const uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+        if (!Update.begin(maxSketchSpace))
+#endif
+        {
+            // start with max available size
+            Update.printError(Serial);
+        }
+#if defined(ESP8266)
+        Update.runAsync(true);
+#endif
+    }
+
+    if (len)
+    {
+        Update.write(data, len);
+    }
+
+    // if the final flag is set then this is the last frame of data
+    if (final)
+    {
+        if (Update.end(true))
+        {
+            // true to set the size to the current progress
+            writelog("Successful OTA update. Restarting ...");
+            Serial.printf("Update Success: %ub written\nRebooting...\n", index + len);
+            ESP.restart();
+        }
+        else
+        {
+            Update.printError(Serial);
+        }
+    }
 }
