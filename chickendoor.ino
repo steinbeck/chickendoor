@@ -165,6 +165,7 @@ Ticker buttonTicker;
 Ticker startMotorTicker;
 Ticker motorRunningSecondsCounter;
 Ticker networkAliveTicker;
+Ticker restartTicker;
 
 
 void setup() {
@@ -200,8 +201,12 @@ void setup() {
   lightMeter.begin();
   bme.begin();
   networkAliveTicker.attach(20, checkNetworkAlive);
-  
+  //restartTicker.attach(3600, restartESP); 
 }
+
+//************************
+//This is the central loop
+//************************
 
 void loop() {
   checkButtons();
@@ -211,14 +216,77 @@ void loop() {
   {
     checkLux();
   }
-
   if (openOperationMode == OP_MODE_TIME || closeOperationMode == OP_MODE_TIME)
   {
     checkTime();
-  }
-
-  
+  }  
   delay(200);
+}
+
+void checkButtons()
+{
+  int upButtonState = digitalRead(upButtonPin);
+  int downButtonState = digitalRead(downButtonPin);
+  
+//  Serial.print("upButtonPin: "); //  Serial.println(upButtonState); //  Serial.print("downButtonPin: "); //  Serial.println(downButtonState); //  if (downButtonState == 1 && doorState == DOOR_OPEN) closeDoor(); //  else if (upButtonState == 1 && doorState == DOOR_CLOSED) openDoor();
+
+if (downButtonState == 1) closeDoor();
+  else if (upButtonState == 1) openDoor();
+}
+
+void checkLux()
+{
+  if (luxTickerRunning)
+  {
+    //Serial.println("Lux Ticker is already running");
+    return;
+  }
+  if (closeOperationMode == OP_MODE_LUX && lux < closingLux && doorState == DOOR_OPEN) 
+  {
+    String message = "Door closing in " + String(closingLuxDelay - (closingLuxSeconds/60)) + " minutes";
+    ESPUI.print(luxCountdownLabelId, message);
+
+    closingLuxTicker.attach(1, checkClosingLuxDuration);
+    
+    luxTickerRunning = true;
+    return;
+  }
+  if (openOperationMode == OP_MODE_LUX && lux > openingLux && doorState == DOOR_CLOSED) 
+  {
+    String message = "Door opening in " + String(openingLuxDelay - (openingLuxSeconds/60)) + " minutes";
+    ESPUI.print(luxCountdownLabelId, message);
+
+    openingLuxTicker.attach(1, checkOpeningLuxDuration);
+    luxTickerRunning = true;
+    return;
+  }
+}
+
+void checkMotorRunning()
+{
+  if (motorRunning == false) return;
+  if (readCurrent() < 10.0) 
+  {
+    writelog("Switching motor off");
+    digitalWrite(motorNumberPin, LOW); 
+    motorRunning = false;
+    if (motorNumberPin == motorPinForward)
+    {
+    doorState = DOOR_CLOSED;
+    preferences.begin("chickendoor", false);
+    preferences.putUInt("doorstate", doorState);
+    preferences.end(); 
+    writelog("Written DOOR_CLOSED to settings");
+    }
+    else
+    {
+    doorState = DOOR_OPEN;
+    preferences.begin("chickendoor", false);
+    preferences.putUInt("doorstate", doorState);
+    preferences.end(); 
+    writelog("Written DOOR_OPEN to settings");
+    }
+  }
 }
 
 void setupWebUI()
@@ -561,32 +629,7 @@ void moveDoor(int thisMotorNumberPin)
   motorRunning = true; 
 }
 
-void checkMotorRunning()
-{
-  if (motorRunning == false) return;
-  if (readCurrent() < 10.0) 
-  {
-    writelog("Switching motor off");
-    digitalWrite(motorNumberPin, LOW); 
-    motorRunning = false;
-    if (motorNumberPin == motorPinForward)
-    {
-    doorState = DOOR_CLOSED;
-    preferences.begin("chickendoor", false);
-    preferences.putUInt("doorstate", doorState);
-    preferences.end(); 
-    writelog("Written DOOR_CLOSED to settings");
-    }
-    else
-    {
-    doorState = DOOR_OPEN;
-    preferences.begin("chickendoor", false);
-    preferences.putUInt("doorstate", doorState);
-    preferences.end(); 
-    writelog("Written DOOR_OPEN to settings");
-    }
-  }
-}
+
 
 float readLux()
 {
@@ -595,33 +638,7 @@ float readLux()
   return lux;
 }
 
-void checkLux()
-{
-  if (luxTickerRunning)
-  {
-    //Serial.println("Lux Ticker is already running");
-    return;
-  }
-  if (closeOperationMode == OP_MODE_LUX && lux < closingLux && doorState == DOOR_OPEN) 
-  {
-    String message = "Door closing in " + String(closingLuxDelay - (closingLuxSeconds/60)) + " minutes";
-    ESPUI.print(luxCountdownLabelId, message);
 
-    closingLuxTicker.attach(1, checkClosingLuxDuration);
-    
-    luxTickerRunning = true;
-    return;
-  }
-  if (openOperationMode == OP_MODE_LUX && lux > openingLux && doorState == DOOR_CLOSED) 
-  {
-    String message = "Door opening in " + String(openingLuxDelay - (openingLuxSeconds/60)) + " minutes";
-    ESPUI.print(luxCountdownLabelId, message);
-
-    openingLuxTicker.attach(1, checkOpeningLuxDuration);
-    luxTickerRunning = true;
-    return;
-  }
-}
 
 void checkTime()
 {
@@ -652,6 +669,17 @@ void checkNetworkAlive()
       Serial.println("Network still alive");
     }
 }
+
+void restartESP()
+{
+  if(motorRunning == false && luxTickerRunning == false)
+  {
+        writelog("Restarting ESP");
+        ESP.restart();
+  }
+}
+
+
 
 void checkClosingLuxDuration()
 {
@@ -761,23 +789,6 @@ void readClimateData()
 
 }
 
-
-void checkButtons()
-{
-  int upButtonState = digitalRead(upButtonPin);
-  int downButtonState = digitalRead(downButtonPin);
-  
-//  Serial.print("upButtonPin: ");
-//  Serial.println(upButtonState);
-//  Serial.print("downButtonPin: ");
-//  Serial.println(downButtonState);
-
-//  if (downButtonState == 1 && doorState == DOOR_OPEN) closeDoor();
-//  else if (upButtonState == 1 && doorState == DOOR_CLOSED) openDoor();
-
-if (downButtonState == 1) closeDoor();
-  else if (upButtonState == 1) openDoor();
-}
 
 
 boolean checkDoorCycled()
