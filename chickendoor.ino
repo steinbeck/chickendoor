@@ -24,6 +24,7 @@
 #include <DNSServer.h>
 #include <ESPUI.h>
 #include <Update.h>
+#include <PubSubClient.h>
 
 
 const byte DNS_PORT = 53;
@@ -52,7 +53,10 @@ const char* OTA_INDEX PROGMEM
 Adafruit_INA219 ina219;
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWD;
+const char titleVersion[] = "Chicken Door Control V1.1.1";
 
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 // Replace with your unique IFTTT URL resource
 // Follow https://randomnerdtutorials.com/esp32-esp8266-publish-sensor-readings-to-google-sheets/
@@ -60,6 +64,7 @@ const char* resource = GOOGLE_API_KEY;
 
 // Maker Webhooks IFTTT
 const char* server = "maker.ifttt.com";
+const char* mqtt_server = "192.168.16.42";
 
 Timezone myTZ;
 BH1750 lightMeter;
@@ -201,6 +206,7 @@ void setup() {
   lightMeter.begin();
   bme.begin();
   networkAliveTicker.attach(20, checkNetworkAlive);
+  for (int i=0; i<10; i++) readLux();
   //restartTicker.attach(3600, restartESP); 
 }
 
@@ -244,20 +250,23 @@ void checkLux()
   if (closeOperationMode == OP_MODE_LUX && lux < closingLux && doorState == DOOR_OPEN) 
   {
     String message = "Door closing in " + String(closingLuxDelay - (closingLuxSeconds/60)) + " minutes";
+    writelog(message);
     ESPUI.print(luxCountdownLabelId, message);
-
-    closingLuxTicker.attach(1, checkClosingLuxDuration);
-    
+    closingLuxSeconds = 0;
+    tempClosingLuxSeconds = 0;
     luxTickerRunning = true;
+    closingLuxTicker.attach(1, checkClosingLuxDuration);
     return;
   }
   if (openOperationMode == OP_MODE_LUX && lux > openingLux && doorState == DOOR_CLOSED) 
   {
     String message = "Door opening in " + String(openingLuxDelay - (openingLuxSeconds/60)) + " minutes";
     ESPUI.print(luxCountdownLabelId, message);
-
-    openingLuxTicker.attach(1, checkOpeningLuxDuration);
+    writelog(message);
+    openingLuxSeconds = 0;
+    tempOpeningLuxSeconds = 0;
     luxTickerRunning = true;
+    openingLuxTicker.attach(1, checkOpeningLuxDuration);
     return;
   }
 }
@@ -330,8 +339,9 @@ void setupWebUI()
   closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver,dashboardTab);
   
   //logfileLabelId = ESPUI.addControl( ControlType::Label, "logfile", "", ControlColor::Peterriver,dashboardTab);
-    
-  ESPUI.begin("ChickenDoor Control");
+
+
+  ESPUI.begin(titleVersion);
   ESPUI.server->on("/ota", 
         HTTP_POST, 
         [](AsyncWebServerRequest* request) { request->send(200); }, 
@@ -386,7 +396,7 @@ void updateWebUI()
         break;
       case OP_MODE_TIME:
         message = modeStrings[2];
-        message +=" "; message+= openingTime; 
+        message +=" "; message+= openingHour; message+= ":"; message+= openingMinute; 
         ESPUI.print(openOperationModeLabelId, message);
         break;
     }
@@ -403,7 +413,7 @@ void updateWebUI()
         break;
       case OP_MODE_TIME:
         message = modeStrings[2];
-        message +=" "; message+= openingTime;
+        message +=" ";  message+= closingHour; message+= ":"; message+= closingMinute;
         ESPUI.print(closeOperationModeLabelId, message);
         break;
     }    
@@ -483,6 +493,8 @@ void buttonHandler(Control *sender, int type)
 
 void textHandler(Control *sender, int type)
 {
+
+  String message;
   int tempInt;
   float tempFloat;
   if (sender->id == openingLuxTextId)
@@ -534,6 +546,14 @@ void textHandler(Control *sender, int type)
   {
     int tempHour = getHour(sender->value);
     int tempMinute = getMinute(sender->value);
+
+    message = "Opening Time changed to ";
+    message.concat(tempHour);
+    message.concat(":");
+    message.concat(tempMinute);
+    writelog(message);
+
+    
     if (tempHour > -1 && tempMinute > -1)
     {
       openingHour = tempHour;
@@ -687,13 +707,14 @@ void checkClosingLuxDuration()
 //  Serial.print(closingLuxSeconds );
 //  Serial.print(" seconds.");
   String message;
-  if (lux > closingLux)
+  if (motorRunning == false && lux > closingLux) //Running motor can lead to wrong readings of sensor
   {
     writelog("Lux above threshold. Stopping door countdown.");
     closingLuxSeconds = 0;
+    luxTickerRunning = false;
     closingLuxTicker.detach();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
-    luxTickerRunning = false;
+
     return;
   }
   closingLuxSeconds++;
@@ -705,9 +726,8 @@ void checkClosingLuxDuration()
   }
   if (closingLuxSeconds > closingLuxDelay * 60) // the delay is giving in minutes, the counter counts seconds
   {
-    closingLuxTicker.detach();
     luxTickerRunning = false;
-    
+    closingLuxTicker.detach(); 
     message = "Lux has been below threshold for ";
     message.concat(closingLuxSeconds);
     message.concat(" seconds. Closing door. ");
@@ -716,6 +736,7 @@ void checkClosingLuxDuration()
     closeDoor();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
     closingLuxSeconds = 0;
+    tempClosingLuxSeconds = 0;
   }
 }
 
@@ -726,13 +747,13 @@ void checkOpeningLuxDuration()
 //  Serial.print(openingLuxSeconds );
 //  Serial.print(" seconds.");
   String message;
-  if (lux < openingLux)
+  if (motorRunning == false && lux < openingLux) // running motor can lead to wrong readings of sensors
   {
     writelog("Lux below threshold. Stopping door countdown.");
     openingLuxSeconds = 0;
+    luxTickerRunning = false;
     openingLuxTicker.detach();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
-    luxTickerRunning = false;
     return;
   }
   openingLuxSeconds++;
@@ -744,8 +765,8 @@ void checkOpeningLuxDuration()
   }
   if (openingLuxSeconds > openingLuxDelay * 60)
   {
-    openingLuxTicker.detach();
     luxTickerRunning = false;
+    openingLuxTicker.detach();
     Serial.print("Lux has been above threshold for ");
     Serial.print(openingLuxSeconds);
     Serial.println(" seconds. Opening door. ");
@@ -758,6 +779,8 @@ void checkOpeningLuxDuration()
     openDoor();
     ESPUI.print(luxCountdownLabelId, "Not ticking");
     openingLuxSeconds = 0;
+    tempOpeningLuxSeconds = 0;
+    
     
   }
 }
