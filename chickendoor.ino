@@ -56,7 +56,7 @@ const char* OTA_INDEX PROGMEM
 Adafruit_INA219 ina219;
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWD;
-const char titleVersion[] = "Chicken Door Control V1.2.0";
+const char titleVersion[] = "Chicken Door Control V1.2.1";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -104,6 +104,7 @@ uint16_t closeOperationModeLabelId;
 uint16_t dateTimeLabelId;
 uint16_t openButtonId;
 uint16_t closeButtonId;
+uint16_t restartButtonId;
 
 uint16_t closingLuxTextId;
 uint16_t openingLuxTextId;
@@ -111,6 +112,7 @@ uint16_t closingLuxDelayTextId;
 uint16_t openingLuxDelayTextId;
 uint16_t closingTimeTextId;
 uint16_t openingTimeTextId;
+
 
 boolean luxTickerRunning = false;
 
@@ -370,6 +372,9 @@ void setupWebUI()
   openOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Opening Mode", "", ControlColor::Peterriver, dashboardTab);
   closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver, dashboardTab);
 
+  restartButtonId = ESPUI.addControl( ControlType::Button, "Chicken Door Control Device", "Restart Device", ControlColor::Alizarin, dashboardTab, &buttonHandler);
+  
+
   //logfileLabelId = ESPUI.addControl( ControlType::Label, "logfile", "", ControlColor::Peterriver,dashboardTab);
 
 
@@ -394,7 +399,7 @@ void setupWebUI()
 void updateWebUI()
 {
   String message;
-   if (luxTickerRunning == false) ESPUI.print(luxCountdownLabelId, "Not ticking");
+  if (luxTickerRunning == false) ESPUI.print(luxCountdownLabelId, "Not ticking");
   if (millis() - oldTime > 5000) {
     readLux();
     readClimateData();
@@ -431,7 +436,7 @@ void updateWebUI()
         break;
       case OP_MODE_TIME:
         message = modeStrings[2];
-        message += " "; message += openingHour; message += ":"; message += openingMinute;
+        message += " "; message += openingTime;
         ESPUI.print(openOperationModeLabelId, message);
         break;
     }
@@ -448,7 +453,7 @@ void updateWebUI()
         break;
       case OP_MODE_TIME:
         message = modeStrings[2];
-        message += " ";  message += closingHour; message += ":"; message += closingMinute;
+        message += " ";  message += closingTime;
         ESPUI.print(closeOperationModeLabelId, message);
         break;
     }
@@ -536,6 +541,13 @@ void buttonHandler(Control *sender, int type)
       closeDoor();
       return;
     }
+    if (sender->id == restartButtonId)
+    {
+      writelog("The restart button was pressed in the web interface");
+      ESP.restart();
+      return;
+    }
+
   }
 }
 
@@ -672,8 +684,8 @@ void openDoor()
   }
   else Serial.println("Motor already moving");
 
-    luxTickerRunning = false;
-    openingLuxTicker.detach();
+  luxTickerRunning = false;
+  openingLuxTicker.detach();
 }
 
 void closeDoor()
@@ -691,10 +703,10 @@ void closeDoor()
   }
   else Serial.println("Motor already moving");
 
-    luxTickerRunning = false;
-    closingLuxTicker.detach();
+  luxTickerRunning = false;
+  closingLuxTicker.detach();
 
-  
+
 }
 
 
@@ -797,7 +809,7 @@ void checkClosingLuxDuration()
     closingLuxSeconds = 0;
     tempClosingLuxSeconds = 0;
   }
-  
+
 }
 
 
