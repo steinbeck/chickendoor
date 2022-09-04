@@ -891,8 +891,18 @@ boolean checkDoorCycled()
   writelog("Cycling door to get to defined state");
   if (doorState == DOOR_UNDEFINED)
     closeDoor();
-  delay(1000);
-  openDoor();
+    while(motorRunning==true)
+    {
+        checkMotorRunning();
+        delay(1000);
+    }
+    openDoor();
+    while(motorRunning==true)
+    {
+        checkMotorRunning();
+        delay(1000);
+    }
+
 }
 
 float readCurrent()
