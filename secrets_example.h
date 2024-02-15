@@ -2,6 +2,17 @@
 
 #define WIFI_SSID "Your SSID here"
 #define WIFI_PASSWD "WLAN AP password here"
-// Replace {yourevent} with your event name and yourkey with your google api key. 
-// Follow https://randomnerdtutorials.com/esp32-esp8266-publish-sensor-readings-to-google-sheets/ to understand the background
-#define GOOGLE_API_KEY "/trigger/{yourevent}/with/key/{yourkey}"
+#define MQTTUSER "your mqtt user name"
+#define MQTTPW "your mqtt password"
+
+#define BROKER_ADDR IPAddress(192,168,1,200) //your mqtt broker ip address
+// For using the googel sheet api for logging
+// Google Project ID
+#define PROJECT_ID "your google sheerts project id"
+// Service Account's client email
+#define CLIENT_EMAIL "your google sheets service account email"
+// Service Account's private key
+#define PRIVATE_KEY_DEF "your private key";
+
+// The ID of the spreadsheet where you'll publish the data
+#define SPREADSHEET_ID "your spreadsheet id";

@@ -26,8 +26,16 @@
 #include <Update.h>
 #include <PubSubClient.h>
 #include <esp_task_wdt.h>
+// logging to google sheets
+#include <ESP_Google_Sheet_Client.h>
+
+// MQTT library for home assistant
+#include <ArduinoHA.h>
+
+
 //10 seconds WDT ; Less screws up OTA
 #define WDT_TIMEOUT 10
+#define WL_MAC_ADDR_LENGTH 6
 
 
 const byte DNS_PORT = 53;
@@ -56,23 +64,35 @@ const char* OTA_INDEX PROGMEM
 Adafruit_INA219 ina219;
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWD;
-const char titleVersion[] = "Chicken Door Control V1.2.1";
+const char titleVersion[] = "Chicken Door Control V1.3.0";
 
-WiFiClient espClient;
-PubSubClient client(espClient);
+WiFiClient client;
+HADevice hadevice;
+HAMqtt mqtt(client, hadevice);
+//HASensor chickendoor("chickendoor");
+HACover chickendoor("chickendoor", HACover::DefaultFeatures);
 
-// Replace with your unique IFTTT URL resource
-// Follow https://randomnerdtutorials.com/esp32-esp8266-publish-sensor-readings-to-google-sheets/
-const char* resource = GOOGLE_API_KEY;
+HASensorNumber volierelux("volierelux", HASensorNumber::PrecisionP1);
+HASensor hadoorstate("doorstate");
 
-// Maker Webhooks IFTTT
-const char* server = "maker.ifttt.com";
-const char* mqtt_server = "192.168.16.42";
+
+// Service Account's private key
+const char PRIVATE_KEY[] PROGMEM = PRIVATE_KEY_DEF;
+
+// The ID of the spreadsheet where you'll publish the data
+const char spreadsheetId[] = SPREADSHEET_ID;
+
+
+// Token Callback function
+void tokenStatusCallback(TokenInfo info);
+
+//End of google sheet api config
+
 
 Timezone myTZ;
 BH1750 lightMeter;
 BME280I2C bme;
-unsigned int doorState = 0; // 1 is open, 2 is closed, use the defines above.
+unsigned int doorState = DOOR_UNDEFINED; // 1 is open, 2 is closed, use the defines above.
 int motorPinForward = 18;
 int motorPinBackward = 19;
 int motorRunningSeconds = 0;
@@ -179,17 +199,21 @@ Ticker motorRunningSecondsCounter;
 Ticker networkAliveTicker;
 Ticker restartTicker;
 
+long lastReconnectAttempt; // for mqttclient update in the loop function
+
 
 void setup() {
   String message;
   Wire.begin(16, 17);
   delay(500);
   // sets the two motor pins (open, close) as outputs:
+  GSheet.printf("ESP Google Sheet Client v%s\n\n", ESP_GOOGLE_SHEET_CLIENT_VERSION);
 
   pinMode(motorPinForward, OUTPUT);
   pinMode(motorPinBackward, OUTPUT);
   Serial.begin(115200);
   WiFi.setHostname("ChickenDoor");
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
 
   if (! ina219.begin()) {
@@ -206,8 +230,22 @@ void setup() {
   waitForSync();
   Serial.print("Wifi connected with IP ");
   Serial.println(WiFi.localIP());
+
+
+  // Set the callback for Google API access token generation status (for debug only)
+  GSheet.setTokenCallback(tokenStatusCallback);
+
+  // Set the seconds to refresh the auth token before expire (60 to 3540, default is 300 seconds)
+  GSheet.setPrerefreshSeconds(10 * 60);
+
+  // Begin the access token generation for Google API authentication
+  GSheet.begin(CLIENT_EMAIL, PROJECT_ID, PRIVATE_KEY);
+
+
   writelog("Chicken Door Control (re)started");
   writelog(String(WiFi.localIP().toString().c_str()));
+  writelog(WiFi.SSID());
+  writelog(String(WiFi.RSSI()));
 
   myTZ.setLocation(F("Europe/Berlin"));
   loadPreferences();
@@ -216,6 +254,7 @@ void setup() {
   writelog(message);
 
   setupWebUI();
+  setupMQTT();
   pinMode(upButtonPin, INPUT_PULLDOWN);
   pinMode(downButtonPin, INPUT_PULLDOWN);
   lightMeter.begin();
@@ -224,9 +263,9 @@ void setup() {
 
   networkAliveTicker.attach(20, checkNetworkAlive);
   for (int i = 0; i < 10; i++) readLux();
-  //restartTicker.attach(3600, restartESP);
   esp_task_wdt_init(WDT_TIMEOUT, true); //enable panic so ESP32 restarts
   esp_task_wdt_add(NULL); //add current thread to WDT watch
+  lastReconnectAttempt = 0;
 
 }
 
@@ -251,7 +290,7 @@ void loop() {
     esp_task_wdt_reset();
     last = millis();
   }
-
+  mqtt.loop();
   delay(200);
 }
 
@@ -316,18 +355,22 @@ void checkMotorRunning()
     if (motorNumberPin == motorPinForward)
     {
       doorState = DOOR_CLOSED;
+      hadoorstate.setValue("closed");
       preferences.begin("chickendoor", false);
       preferences.putUInt("doorstate", doorState);
       preferences.end();
       writelog("Written DOOR_CLOSED to settings");
+      chickendoor.setState(HACover::StateClosed);
     }
     else
     {
       doorState = DOOR_OPEN;
+      hadoorstate.setValue("open");
       preferences.begin("chickendoor", false);
       preferences.putUInt("doorstate", doorState);
       preferences.end();
       writelog("Written DOOR_OPEN to settings");
+      chickendoor.setState(HACover::StateOpen);
     }
   }
 }
@@ -373,7 +416,7 @@ void setupWebUI()
   closeOperationModeLabelId = ESPUI.addControl( ControlType::Label, "Closing Mode", "", ControlColor::Peterriver, dashboardTab);
 
   restartButtonId = ESPUI.addControl( ControlType::Button, "Chicken Door Control Device", "Restart Device", ControlColor::Alizarin, dashboardTab, &buttonHandler);
-  
+
 
   //logfileLabelId = ESPUI.addControl( ControlType::Label, "logfile", "", ControlColor::Peterriver,dashboardTab);
 
@@ -404,6 +447,7 @@ void updateWebUI()
     readLux();
     readClimateData();
     readCurrent();
+    reportMQTT();
     ESPUI.print(dateTimeLabelId, String(myTZ.dateTime()));
     ESPUI.print(luxLabelId, String(readLux()));
     ESPUI.print(temperatureLabelId, String(temperature));
@@ -483,14 +527,12 @@ void loadPreferences()
   preferences.end();
 
   // postprocessing of preferences
-  if (tempDoorState == 0)
+  if (tempDoorState == DOOR_UNDEFINED)
   {
     writelog("door state undefined. Cycling door states ...");
     checkDoorCycled();
   }
   else doorState = tempDoorState;
-
-
 }
 
 void operationModeSelector(Control *sender, int type)
@@ -645,7 +687,6 @@ void textHandler(Control *sender, int type)
 
 }
 
-
 int getHour(String timeString)
 {
   int hourInt = -1;
@@ -676,6 +717,7 @@ void openDoor()
   {
     moveDoor(motorPinBackward);
     doorState = DOOR_UNDEFINED;
+    hadoorstate.setValue("Undefined");
     preferences.begin("chickendoor", false);
     preferences.putUInt("doorstate", doorState);
     preferences.end();
@@ -695,6 +737,7 @@ void closeDoor()
   {
     moveDoor(motorPinForward);
     doorState = DOOR_UNDEFINED;
+    hadoorstate.setValue("Undefined");
     preferences.begin("chickendoor", false);
     preferences.putUInt("doorstate", doorState);
     preferences.end();
@@ -705,11 +748,7 @@ void closeDoor()
 
   luxTickerRunning = false;
   closingLuxTicker.detach();
-
-
 }
-
-
 
 void moveDoor(int thisMotorNumberPin)
 {
@@ -718,16 +757,12 @@ void moveDoor(int thisMotorNumberPin)
   motorRunning = true;
 }
 
-
-
 float readLux()
 {
   lux = lightMeter.readLightLevel();
   //Serial.print("Lux: "); Serial.println(lux);
   return lux;
 }
-
-
 
 void checkTime()
 {
@@ -770,8 +805,6 @@ void restartESP()
     ESP.restart();
   }
 }
-
-
 
 void checkClosingLuxDuration()
 {
@@ -884,24 +917,22 @@ void readClimateData()
 
 }
 
-
-
 boolean checkDoorCycled()
 {
   writelog("Cycling door to get to defined state");
   if (doorState == DOOR_UNDEFINED)
     closeDoor();
-    while(motorRunning==true)
-    {
-        checkMotorRunning();
-        delay(1000);
-    }
-    openDoor();
-    while(motorRunning==true)
-    {
-        checkMotorRunning();
-        delay(1000);
-    }
+  while (motorRunning == true)
+  {
+    checkMotorRunning();
+    delay(1000);
+  }
+  openDoor();
+  while (motorRunning == true)
+  {
+    checkMotorRunning();
+    delay(1000);
+  }
 
 }
 
@@ -930,55 +961,130 @@ float readCurrent()
 // The following methods is from https://randomnerdtutorials.com/esp32-esp8266-publish-sensor-readings-to-google-sheets/
 // to log messages to a google sheet using webhooks from IFTTT
 
+//NOTE: At the momement, this is a mix of mqtt looging to my home assistant and to google sheets, because IFTTT is making webhooks commercial
+
+void setupMQTT() {
+  String message;
+  byte mac[WL_MAC_ADDR_LENGTH];
+  WiFi.macAddress(mac);
+  hadevice.setUniqueId(mac, sizeof(mac));
+  hadevice.setName("Chickendoor");
+  hadevice.enableSharedAvailability();
+  hadevice.enableLastWill();
+  hadevice.setSoftwareVersion("1.3.0");
+  hadevice.setManufacturer("Wonky Workshop");
+  hadevice.setModel("CD-1");
+  
+  chickendoor.setIcon("mdi:home");
+  chickendoor.setName("chickendoor");
+  chickendoor.setDeviceClass("door");
+  chickendoor.onCommand(onCoverCommand);
+  chickendoor.setAvailability(true);
+
+  volierelux.setIcon("mdi:home");
+  volierelux.setName("Voliere lux");
+  volierelux.setUnitOfMeasurement("lx");
+  volierelux.setDeviceClass("illuminance");
+  volierelux.setAvailability(true);
+
+  hadoorstate.setIcon("mdi:home");
+  hadoorstate.setName("doorstate");
+  hadoorstate.setAvailability(true);
+  
+  mqtt.begin(BROKER_ADDR, MQTTUSER, MQTTPW);
+  writelog("MQTT setup finished");
+}
+
+void reportMQTT()
+{
+  volierelux.setValue(lux);
+  if (doorState == DOOR_OPEN) {
+    hadoorstate.setValue("Open");
+  }
+  else if (doorState == DOOR_CLOSED) {
+    hadoorstate.setValue("Closed");
+  }
+  else if (doorState == DOOR_UNDEFINED) {
+    hadoorstate.setValue("Undefined");
+  }
+
+}
+
+void onCoverCommand(HACover::CoverCommand cmd, HACover* sender) {
+  if (cmd == HACover::CommandOpen) {
+    Serial.println("Command: Open");
+    writelog("Open door command received from home assistant");
+    openDoor();
+    sender->setState(HACover::StateOpening); // report state back to the HA
+  } else if (cmd == HACover::CommandClose) {
+    Serial.println("Command: Close");
+    writelog("Close door command received from home assistant");
+    closeDoor();
+    sender->setState(HACover::StateClosing); // report state back to the HA
+  } else if (cmd == HACover::CommandStop) {
+    Serial.println("Command: Stop");
+    writelog("Stop door command received from home assistant. Stop command not supported.");
+  }
+
+  // Available states:
+  // HACover::StateClosed
+  // HACover::StateClosing
+  // HACover::StateOpen
+  // HACover::StateOpening
+  // HACover::StateStopped
+
+  // You can also report position using setPosition() method
+}
+
+
 void writelog(String message) {
-  Serial.print("Connecting to ");
-  Serial.print(server);
+  Serial.print("Connecting to Google Sheets");
   Serial.print("About to log message: ");
   Serial.print(message);
 
-  WiFiClient client;
-  int retries = 5;
-  while (!!!client.connect(server, 80) && (retries-- > 0)) {
-    Serial.print(".");
-  }
-  Serial.println();
-  if (!!!client.connected()) {
-    Serial.println("Failed to connect...");
-  }
+  bool ready = GSheet.ready();
 
-  Serial.print("Request resource: ");
-  Serial.println(resource);
+  if (ready) {
 
-  // Temperature in Celsius
-  String jsonObject = String("{\"value1\":\"") + message + "\"}";
+    FirebaseJson response;
 
-  // Comment the previous line and uncomment the next line to publish temperature readings in Fahrenheit
-  /*String jsonObject = String("{\"value1\":\"") + (1.8 * bme.readTemperature() + 32) + "\",\"value2\":\""
-                      + (bme.readPressure()/100.0F) + "\",\"value3\":\"" + bme.readHumidity() + "\"}";*/
+    Serial.println("\nAppend spreadsheet values...");
+    Serial.println("----------------------------");
 
-  client.println(String("POST ") + resource + " HTTP/1.1");
-  client.println(String("Host: ") + server);
-  client.println("Connection: close\r\nContent-Type: application/json");
-  client.print("Content-Length: ");
-  client.println(jsonObject.length());
-  client.println();
-  client.println(jsonObject);
+    FirebaseJson valueRange;
+    // Get timestamp
+    //epochTime = getTime();
 
-  int timeout = 5 * 10; // 5 seconds
-  while (!!!client.available() && (timeout-- > 0)) {
-    delay(100);
-  }
-  if (!!!client.available()) {
-    Serial.println("No response...");
-  }
-  while (client.available()) {
-    Serial.write(client.read());
+    valueRange.add("majorDimension", "COLUMNS");
+    valueRange.set("values/[0]/[0]", myTZ.dateTime());
+    valueRange.set("values/[1]/[0]", message);
+
+    // For Google Sheet API ref doc, go to https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
+    // Append values to the spreadsheet
+    bool success = GSheet.values.append(&response /* returned response */, spreadsheetId /* spreadsheet Id to append */, "Sheet1!A1" /* range to append */, &valueRange /* data range to append */);
+    if (success) {
+      response.toString(Serial, true);
+      valueRange.clear();
+    }
+    else {
+      Serial.println(GSheet.errorReason());
+    }
+    Serial.println();
+    Serial.println(ESP.getFreeHeap());
   }
 
-  Serial.println("\nclosing connection");
-  client.stop();
 }
 
+//callback for google sheets logging
+void tokenStatusCallback(TokenInfo info) {
+  if (info.status == token_status_error) {
+    GSheet.printf("Token info: type = %s, status = %s\n", GSheet.getTokenType(info).c_str(), GSheet.getTokenStatus(info).c_str());
+    GSheet.printf("Token error: %s\n", GSheet.getTokenError(info).c_str());
+  }
+  else {
+    GSheet.printf("Token info: type = %s, status = %s\n", GSheet.getTokenType(info).c_str(), GSheet.getTokenStatus(info).c_str());
+  }
+}
 
 void handleOTAUpload(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final)
 {
