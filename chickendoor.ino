@@ -344,36 +344,6 @@ void checkLux()
   }
 }
 
-void checkMotorRunning()
-{
-  if (motorRunning == false) return;
-  if (readCurrent() < 10.0)
-  {
-    writelog("Switching motor off");
-    digitalWrite(motorNumberPin, LOW);
-    motorRunning = false;
-    if (motorNumberPin == motorPinForward)
-    {
-      doorState = DOOR_CLOSED;
-      hadoorstate.setValue("closed");
-      preferences.begin("chickendoor", false);
-      preferences.putUInt("doorstate", doorState);
-      preferences.end();
-      writelog("Written DOOR_CLOSED to settings");
-      chickendoor.setState(HACover::StateClosed);
-    }
-    else
-    {
-      doorState = DOOR_OPEN;
-      hadoorstate.setValue("open");
-      preferences.begin("chickendoor", false);
-      preferences.putUInt("doorstate", doorState);
-      preferences.end();
-      writelog("Written DOOR_OPEN to settings");
-      chickendoor.setState(HACover::StateOpen);
-    }
-  }
-}
 
 void setupWebUI()
 {
@@ -527,12 +497,12 @@ void loadPreferences()
   preferences.end();
 
   // postprocessing of preferences
-  if (tempDoorState == DOOR_UNDEFINED)
-  {
-    writelog("door state undefined. Cycling door states ...");
-    checkDoorCycled();
-  }
-  else doorState = tempDoorState;
+  //if (tempDoorState == DOOR_UNDEFINED)
+  //{
+  //  writelog("door state undefined. Cycling door states ...");
+  //  checkDoorCycled();
+  //}
+  //else doorState = tempDoorState;
 }
 
 void operationModeSelector(Control *sender, int type)
@@ -709,7 +679,6 @@ int getMinute(String timeString)
   return minuteInt;
 }
 
-
 void openDoor()
 {
   writelog("call to openDoor");
@@ -756,6 +725,56 @@ void moveDoor(int thisMotorNumberPin)
   digitalWrite(motorNumberPin, HIGH);
   motorRunning = true;
 }
+
+boolean checkDoorCycled()
+{
+  writelog("Cycling door to get to defined state");
+  if (doorState == DOOR_UNDEFINED)
+    //closeDoor();
+  //while (motorRunning == true)
+  //{
+  //  checkMotorRunning();
+  //  delay(1000);
+  //}
+  openDoor();
+  while (motorRunning == true)
+  {
+    checkMotorRunning();
+    delay(1000);
+  }
+}
+
+void checkMotorRunning()
+{
+  if (motorRunning == false) return;
+  if (readCurrent() < 10.0)
+  {
+    writelog("Switching motor off");
+    digitalWrite(motorNumberPin, LOW);
+    motorRunning = false;
+    if (motorNumberPin == motorPinForward)
+    {
+      doorState = DOOR_CLOSED;
+      hadoorstate.setValue("closed");
+      preferences.begin("chickendoor", false);
+      preferences.putUInt("doorstate", doorState);
+      preferences.end();
+      writelog("Written DOOR_CLOSED to settings");
+      chickendoor.setState(HACover::StateClosed);
+    }
+    else
+    {
+      doorState = DOOR_OPEN;
+      hadoorstate.setValue("open");
+      preferences.begin("chickendoor", false);
+      preferences.putUInt("doorstate", doorState);
+      preferences.end();
+      writelog("Written DOOR_OPEN to settings");
+      chickendoor.setState(HACover::StateOpen);
+    }
+  }
+}
+
 
 float readLux()
 {
@@ -917,24 +936,6 @@ void readClimateData()
 
 }
 
-boolean checkDoorCycled()
-{
-  writelog("Cycling door to get to defined state");
-  if (doorState == DOOR_UNDEFINED)
-    closeDoor();
-  while (motorRunning == true)
-  {
-    checkMotorRunning();
-    delay(1000);
-  }
-  openDoor();
-  while (motorRunning == true)
-  {
-    checkMotorRunning();
-    delay(1000);
-  }
-
-}
 
 float readCurrent()
 {
