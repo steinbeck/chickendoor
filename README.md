@@ -1,4 +1,8 @@
 # IoT Chicken Door
+
+## Warning
+This repo is here for documentation purposes only. I have retired this Chicken Door control in early 2026 and moved to a Shelly shutter control with a Shelly Plus 2PM and some relays. The software in this repo worked for many years, but was unreliable. I guess I put too much in it (lux sensor, temp, many timers). The Shelly solution is so much more reliable. :)
+
 ## Introduction
 This is code for an ESP32-based Internet-of-Things (IoT) chicken door. We have a [Heini Koop chicken coop](https://www.heinicoop.de/produkt/heinicoop-huehnerstall-uno/), but the principle of this door mechanism is generic and should work with sliding and other doors.
 
